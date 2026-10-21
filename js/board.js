@@ -1,7 +1,7 @@
 /* לוח סרטוט תרגילים: עורך, נגן, ייצוא סרטון/תמונה/קישור, ומסך צפייה בקישור משותף */
 const Board = (() => {
   const CATS = ['חימום', 'כדרור', 'מסירות', 'קליעה', 'הגנה', 'התקפה', 'מעברים', 'משחקונים', 'כושר', 'אחר'];
-  const LINE_NAMES = { run: 'ריצה', dribble: 'כדרור', pass: 'מסירה', screen: 'חסימה' };
+  const LINE_NAMES = { run: 'ריצה', dribble: 'כדרור', pass: 'מסירה', screen: 'חסימה', handoff: 'הנד-אוף' };
   const TOOLS = [
     { id: 'move', label: 'הזזה', svg: '<path d="M5 3l14 8-6 2-2 6z"/>' },
     { id: 'off', label: 'התקפה', svg: '<circle cx="12" cy="12" r="8" fill="currentColor"/><text x="12" y="16" text-anchor="middle" font-size="10" fill="#fff" stroke="none" font-weight="700">1</text>' },
@@ -14,10 +14,11 @@ const Board = (() => {
     { id: 'dribble', label: 'כדרור', svg: '<path d="M3 16l2-3 2 3 2-3 2 3 2-3 2 3"/><path d="M17 11l4 2-4 2"/>' },
     { id: 'pass', label: 'מסירה', svg: '<path d="M4 18l14-12" stroke-dasharray="3 3"/><path d="M13 5l5 1-1 5"/>' },
     { id: 'screen', label: 'חסימה', svg: '<path d="M5 19L17 7"/><path d="M14 4l6 6" stroke-width="3"/>' },
+    { id: 'handoff', label: 'הנד-אוף', svg: '<path d="M4 18L15 9"/><path d="M13 5l5 6M16 3l5 6" stroke-width="2.5"/>' },
     'sep',
     { id: 'erase', label: 'מחיקה', svg: '<path d="M20 20H8l-5-5 10-10 8 8-6 6"/><path d="M7 10l7 7"/>' },
   ];
-  const isLineTool = t => ['run', 'dribble', 'pass', 'screen'].includes(t);
+  const isLineTool = t => ['run', 'dribble', 'pass', 'screen', 'handoff'].includes(t);
 
   const newDrill = () => ({
     id: DB.uid(), name: '', cat: '', age: '', duration: '', players: '', desc: '', tags: '',
@@ -154,12 +155,19 @@ const Board = (() => {
   /* קישור לצפייה: התרגיל כולו מקודד בתוך הקישור */
   function compact(drill) {
     const r = v => Math.round(v * 100) / 100;
+    const packFrames = frames => frames.map(f => ({
+      pos: Object.fromEntries(Object.entries(f.pos).map(([k, p]) => [k, [r(p[0]), r(p[1])]])),
+      ball: f.ball ? (f.ball.h ? (f.ball.via ? { h: f.ball.h, via: f.ball.via } : { h: f.ball.h }) : { p: [r(f.ball.p[0]), r(f.ball.p[1])] }) : null,
+      lines: (f.lines || []).map(l => ({ type: l.type, pts: l.pts.map(p => [r(p[0]), r(p[1])]) })),
+      note: f.note || '',
+    }));
     return {
+      mainName: drill.mainName || '', variants: (drill.variants || []).map(v => ({ name: v.name, frames: packFrames(v.frames) })),
       v: 1, name: drill.name, cat: drill.cat, age: drill.age, duration: drill.duration, desc: drill.desc,
       court: drill.court, speed: drill.speed, objects: drill.objects.map(o => ({ id: o.id, t: o.t, n: o.n })),
       frames: drill.frames.map(f => ({
         pos: Object.fromEntries(Object.entries(f.pos).map(([k, p]) => [k, [r(p[0]), r(p[1])]])),
-        ball: f.ball ? (f.ball.h ? { h: f.ball.h } : { p: [r(f.ball.p[0]), r(f.ball.p[1])] }) : null,
+        ball: f.ball ? (f.ball.h ? (f.ball.via ? { h: f.ball.h, via: f.ball.via } : { h: f.ball.h }) : { p: [r(f.ball.p[0]), r(f.ball.p[1])] }) : null,
         lines: (f.lines || []).map(l => ({ type: l.type, pts: l.pts.map(p => [r(p[0]), r(p[1])]) })),
         note: f.note || '',
       })),
@@ -238,10 +246,13 @@ const Board = (() => {
     const isNew = !drill;
     if (!drill) drill = newDrill();
     if (!drill.frames?.length) drill.frames = [{ pos: {}, ball: null, lines: [], note: '' }];
+    drill.variants ||= [];
     let saved = !isNew;
+    let act = 'main', mainFrames = null; // האופציה הפעילה; כשאופציה פעילה, המהלך הראשי שמור ב-mainFrames
+    const allLists = () => [act === 'main' ? drill.frames : mainFrames, ...drill.variants.map(v => v.frames)];
     let tool = 'move', fi = 0, sel = null, selLine = null, draft = null, drag = null, playing = false, t = 0, raf = 0;
     const undo = [], redo = [];
-    const snap = () => JSON.stringify({ objects: drill.objects, frames: drill.frames, court: drill.court, seq: drill.seq });
+    const snap = () => JSON.stringify({ objects: drill.objects, court: drill.court, seq: drill.seq, act, variants: drill.variants, main: act === 'main' ? drill.frames : mainFrames });
     let last = snap();
 
     view.innerHTML = `
@@ -260,7 +271,13 @@ const Board = (() => {
             <span class="tool-sep"></span>
             <button class="tool" data-act="undo" title="ביטול">${U.icon('undo')}ביטול</button>
             <button class="tool" data-act="redo" title="חזרה">${U.icon('redo')}חזרה</button>
+            <span class="tool-sep"></span>
+            <div class="court-toggle" role="group" aria-label="גודל מגרש">
+              <button class="tool" data-court="half" title="חצי מגרש"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M9 4v6h6V4"/></svg>חצי</button>
+              <button class="tool" data-court="full" title="מגרש שלם"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="1"/><path d="M12 6v12M2 10h3v4H2M22 10h-3v4h3"/></svg>שלם</button>
+            </div>
           </div>
+          <div class="variants" id="variants"></div>
           <div class="canvas-box"><canvas id="cv" aria-label="לוח התרגיל"></canvas></div>
           <div class="frames" id="frames"></div>
           <div class="row">
@@ -290,7 +307,7 @@ const Board = (() => {
             <div class="stack">
               <div class="grid-2">
                 <label class="field"><span>קטגוריה</span><select class="input" data-f="cat"><option value="">—</option>${CATS.map(c => `<option ${drill.cat === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
-                <label class="field"><span>מגרש</span><select class="input" id="court"><option value="half">חצי מגרש</option><option value="full">מגרש מלא</option></select></label>
+                <label class="field"><span>מגרש</span><select class="input" id="court"><option value="half">חצי מגרש</option><option value="full">מגרש שלם</option></select></label>
                 <label class="field"><span>גילאים</span><input class="input" data-f="age" value="${U.esc(drill.age)}" placeholder="למשל ד׳-ו׳"></label>
                 <label class="field"><span>משך (דק׳)</span><input class="input" data-f="duration" type="number" min="0" value="${U.esc(drill.duration)}"></label>
               </div>
@@ -335,16 +352,23 @@ const Board = (() => {
     }
     function restore(s) {
       const o = JSON.parse(s);
-      Object.assign(drill, o); last = s;
+      Object.assign(drill, { objects: o.objects, court: o.court, seq: o.seq, variants: o.variants });
+      act = o.act;
+      if (act === 'main') { drill.frames = o.main; mainFrames = null; }
+      else { mainFrames = o.main; drill.frames = (drill.variants.find(v => v.id === act) || { frames: o.main }).frames; }
+      last = s; renderVariants();
       fi = Math.min(fi, drill.frames.length - 1); sel = null; selLine = null;
       renderFrames(); renderSel(); scheduleSave(); draw();
     }
 
     /* שמירה אוטומטית */
     const stateEl = U.$('#save-state', view);
+    const toStore = () => Object.assign({}, drill, { frames: act === 'main' ? drill.frames : mainFrames });
     const doSave = async () => {
-      drill.thumb = Court.thumbnail(drill);
-      await DB.put('drills', drill);
+      const out = toStore();
+      out.thumb = drill.thumb = Court.thumbnail(out);
+      await DB.put('drills', out);
+      drill.updatedAt = out.updatedAt; drill.createdAt = out.createdAt;
       saved = true; stateEl.textContent = 'נשמר';
       if (location.hash.endsWith('/new')) history.replaceState(null, '', '#/board/' + drill.id);
     };
@@ -397,14 +421,92 @@ const Board = (() => {
     function addObject(type, p) {
       const o = { id: 'o' + (++drill.seq), t: type, n: nextLabel(type) };
       drill.objects.push(o);
-      drill.frames.forEach(f => f.pos[o.id] = [p[0], p[1]]);
+      allLists().forEach(L => L.forEach(f => f.pos[o.id] = [p[0], p[1]]));
       return o;
     }
     function removeObject(id) {
       drill.objects = drill.objects.filter(o => o.id !== id);
-      drill.frames.forEach(f => { delete f.pos[id]; if (f.ball?.h === id) f.ball = null; });
+      allLists().forEach(L => L.forEach(f => { delete f.pos[id]; if (f.ball?.h === id) f.ball = null; }));
     }
     function clampP(p) { const d = Court.dims(drill.court); return [Math.max(-0.4, Math.min(d.w + 0.4, p[0])), Math.max(-0.4, Math.min(d.h + 0.4, p[1]))]; }
+
+    /* ---------- תנועה אוטומטית: קו שמתחיל בשחקן נהיה תנועה בשלב הבא ---------- */
+    const clone = o => o == null ? o : JSON.parse(JSON.stringify(o));
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    function objNear(f, p, r, exceptId) {
+      let best = null, bd = r;
+      for (const o of drill.objects) {
+        if (o.t === 'cone' || o.id === exceptId) continue;
+        const q = f.pos[o.id]; if (!q) continue;
+        const d = Court.dist(p, q); if (d < bd) { bd = d; best = o; }
+      }
+      return best;
+    }
+    function ensureNext(k) {
+      if (drill.frames[k + 1]) return false;
+      const f = drill.frames[k];
+      drill.frames.push({ pos: clone(f.pos), ball: clone(f.ball), lines: [], note: '' });
+      return true;
+    }
+    // משנה מיקום בשלב k1, וממשיך לשלבים הבאים שעוד לא שונו ידנית
+    function setPos(k1, id, p) {
+      const old = drill.frames[k1].pos[id];
+      drill.frames[k1].pos[id] = p.slice();
+      for (let j = k1 + 1; j < drill.frames.length; j++) {
+        const q = drill.frames[j].pos[id];
+        if (q && old && Court.dist(q, old) < 0.01) drill.frames[j].pos[id] = p.slice(); else break;
+      }
+    }
+    function setBall(k1, b) {
+      const old = clone(drill.frames[k1].ball);
+      drill.frames[k1].ball = clone(b);
+      for (let j = k1 + 1; j < drill.frames.length; j++) {
+        if (same(drill.frames[j].ball, old)) drill.frames[j].ball = clone(b); else break;
+      }
+    }
+    function lineEffect(line, k) {
+      const f = drill.frames[k], a = line.pts[0], z = line.pts[line.pts.length - 1];
+      const who = objNear(f, a, 1.1);
+      const out = { who };
+      if (['run', 'dribble', 'screen'].includes(line.type) && who) out.pos = z.slice();
+      if (line.type === 'pass') {
+        const to = objNear(f, z, 1.4, who?.id);
+        out.ball = to ? { h: to.id } : { p: z.slice() };
+      }
+      if (line.type === 'handoff') {
+        const to = objNear(f, z, 1.6, who?.id);
+        if (who) {
+          const L = Court.dist(a, z) || 1, back = Math.min(0.9, L * 0.5);
+          out.pos = [z[0] - (z[0] - a[0]) / L * back, z[1] - (z[1] - a[1]) / L * back];
+        }
+        if (to) out.ball = { h: to.id, via: 'handoff' };
+      }
+      return out;
+    }
+    function applyLine(line, k) {
+      const eff = lineEffect(line, k), f = drill.frames[k];
+      if (!eff.pos && !eff.ball) return false;
+      const created = ensureNext(k);
+      if (eff.pos) setPos(k + 1, eff.who.id, eff.pos);
+      if (eff.ball) setBall(k + 1, eff.ball);
+      // כדרור/מסירה/הנד-אוף של שחקן בלי כדור: הכדור אצלו בתחילת השלב
+      if (eff.who && ['dribble', 'pass', 'handoff'].includes(line.type) && !f.ball) f.ball = { h: eff.who.id };
+      return created;
+    }
+    function unapplyLine(line, k) {
+      const nf = drill.frames[k + 1]; if (!nf) return;
+      const eff = lineEffect(line, k), f = drill.frames[k];
+      if (eff.pos && nf.pos[eff.who.id] && Court.dist(nf.pos[eff.who.id], eff.pos) < 0.05) setPos(k + 1, eff.who.id, f.pos[eff.who.id]);
+      if (eff.ball && same(nf.ball, eff.ball)) setBall(k + 1, f.ball);
+      // שלב אחרון שנשאר זהה לקודם ובלי קווים — מוחקים
+      if (k + 1 === drill.frames.length - 1 && !(nf.lines || []).length && !nf.note && same(nf.pos, f.pos) && same(nf.ball, f.ball)) {
+        drill.frames.pop(); if (fi > drill.frames.length - 1) fi = drill.frames.length - 1;
+      }
+    }
+    function removeLine(l) {
+      unapplyLine(l, fi);
+      frame().lines = frame().lines.filter(x => x !== l);
+    }
 
     cv.addEventListener('pointerdown', e => {
       if (playing) return;
@@ -433,8 +535,8 @@ const Board = (() => {
       if (tool === 'erase') {
         if (hitO) { removeObject(hitO.id); U.toast('נמחק — אפשר לבטל'); }
         else if (hitBall(p)) frame().ball = null;
-        else { const l = hitLine(p); if (l) frame().lines = frame().lines.filter(x => x !== l); }
-        commit(); renderSel(); draw(); return;
+        else { const l = hitLine(p); if (l) removeLine(l); }
+        commit(); renderFrames(); renderSel(); draw(); return;
       }
       if (isLineTool(tool)) {
         let start = p;
@@ -468,14 +570,17 @@ const Board = (() => {
         if (L > 0.7) {
           // הצמדת הסוף לשחקן קרוב במסירה
           const endO = hitObject(pts[pts.length - 1]);
-          if (endO && draft.type === 'pass') pts[pts.length - 1] = frame().pos[endO.id].slice();
+          if (endO && (draft.type === 'pass' || draft.type === 'handoff')) pts[pts.length - 1] = frame().pos[endO.id].slice();
           // פישוט נקודות
           const simple = [pts[0]];
           for (let i = 1; i < pts.length - 1; i++) if (Court.dist(simple[simple.length - 1], pts[i]) > 0.45) simple.push(pts[i]);
           simple.push(pts[pts.length - 1]);
           const line = { id: 'l' + (++drill.seq), type: draft.type, pts: draft.type === 'pass' ? [simple[0], simple[simple.length - 1]] : simple };
           (frame().lines ||= []).push(line);
-          draft = null; commit();
+          draft = null;
+          const created = applyLine(line, fi);
+          commit(); renderFrames();
+          if (created) U.toast(`נוצר שלב ${fi + 2} אוטומטית. לחץ "הפעלה" כדי לראות את התנועה`);
         } else draft = null;
         draw();
       }
@@ -503,8 +608,8 @@ const Board = (() => {
         box.innerHTML = `<div class="panel-head"><h3>קו ${LINE_NAMES[line.type]}</h3></div>
           <div class="row"><select class="input grow" id="line-type">${Object.entries(LINE_NAMES).map(([k, v]) => `<option value="${k}" ${k === line.type ? 'selected' : ''}>${v}</option>`).join('')}</select>
           <button class="btn danger" id="line-del">${U.icon('trash', 18)}</button></div>`;
-        U.$('#line-type', box).onchange = e => { line.type = e.target.value; commit(); draw(); renderSel(); };
-        U.$('#line-del', box).onclick = () => { frame().lines = frame().lines.filter(l => l !== line); selLine = null; commit(); renderSel(); draw(); };
+        U.$('#line-type', box).onchange = e => { unapplyLine(line, fi); line.type = e.target.value; if (line.type === 'pass') line.pts = [line.pts[0], line.pts[line.pts.length - 1]]; applyLine(line, fi); commit(); renderFrames(); draw(); renderSel(); };
+        U.$('#line-del', box).onclick = () => { removeLine(line); selLine = null; commit(); renderFrames(); renderSel(); draw(); };
       } else if (!drill.objects.length) {
         box.classList.remove('hidden');
         box.innerHTML = `<div class="panel-head"><h3>התחלה מהירה</h3></div>
@@ -516,7 +621,7 @@ const Board = (() => {
           const offs = pr.off.map(p => addObject('off', toCourt(drill.court, p)));
           if (pr.def) pr.off.forEach(p => addObject('def', toCourt(drill.court, [p[0] + (BASKET[0] - p[0]) * .2, p[1] + (BASKET[1] - p[1]) * .2])));
           (pr.cones || []).forEach(p => addObject('cone', toCourt(drill.court, p)));
-          drill.frames.forEach(f => f.ball = { h: offs[0].id });
+          allLists().forEach(L => L.forEach(f => f.ball = { h: offs[0].id }));
           box.onclick = null; setTool('move'); commit(); renderSel(); draw();
         };
       } else {
@@ -533,6 +638,59 @@ const Board = (() => {
       U.$('#f-note', view).value = frame().note || '';
       const sc = U.$('#scrub', view); sc.max = drill.frames.length - 1; sc.value = fi;
     }
+    /* ---------- אופציות באותו תרגיל ---------- */
+    const curVar = () => drill.variants.find(v => v.id === act);
+    const actName = () => act === 'main' ? (drill.mainName || 'מהלך ראשי') : (curVar()?.name || 'אופציה');
+    function renderVariants() {
+      const box = U.$('#variants', view);
+      const chips = [{ id: 'main', name: drill.mainName || 'מהלך ראשי' }, ...drill.variants];
+      box.innerHTML = `<span class="small muted">אופציות:</span>` +
+        chips.map(v => `<button class="var-chip ${v.id === act ? 'on' : ''}" data-v="${v.id}">${U.esc(v.name)}</button>`).join('') +
+        `<button class="btn sm ghost" data-addv title="אופציה חדשה שמתחילה מהשלב הנוכחי">${U.icon('plus', 16)} אופציה</button>` +
+        `<button class="btn sm ghost icon" data-renv title="שינוי שם">${U.icon('edit', 15)}</button>` +
+        (act !== 'main' ? `<button class="btn sm ghost icon danger" data-delv title="מחיקת האופציה">${U.icon('trash', 15)}</button>` : '');
+    }
+    function switchTo(id) {
+      if (id === act) return;
+      if (act === 'main') mainFrames = drill.frames;
+      drill.frames = id === 'main' ? mainFrames : drill.variants.find(v => v.id === id).frames;
+      if (id === 'main') mainFrames = null;
+      act = id; fi = Math.min(fi, drill.frames.length - 1); t = fi; sel = selLine = null;
+      renderVariants(); renderFrames(); renderSel(); draw();
+    }
+    U.$('#variants', view).addEventListener('click', async e => {
+      const b = e.target.closest('button'); if (!b) return;
+      stop();
+      if (b.dataset.v) return switchTo(b.dataset.v);
+      if (b.hasAttribute('data-addv')) {
+        const n = drill.variants.length + 2;
+        const v = { id: 'v' + (++drill.seq), name: `אופציה ${n}`, frames: clone(drill.frames.slice(0, fi + 1)) };
+        v.frames[v.frames.length - 1].lines = [];
+        drill.variants.push(v);
+        switchTo(v.id); fi = drill.frames.length - 1; t = fi; renderFrames(); draw(); commit();
+        U.toast(`"${v.name}" מתחילה מהשלב הזה. צייר מכאן את ההמשך האחר`);
+      }
+      if (b.hasAttribute('data-renv')) {
+        U.modal({
+          title: 'שם האופציה', body: `<input class="input" id="vn" value="${U.esc(actName())}" placeholder="למשל: מסירה לכנף / חדירה לסל">`,
+          foot: `<button class="btn primary" data-ok>שמירה</button><button class="btn" data-close>ביטול</button>`,
+          onOpen: (m, close) => {
+            const save = () => { const v = m.querySelector('#vn').value.trim(); if (!v) return; if (act === 'main') drill.mainName = v; else curVar().name = v; close(); renderVariants(); commit(); };
+            m.querySelector('[data-ok]').onclick = save;
+            m.querySelector('#vn').onkeydown = ev => { if (ev.key === 'Enter') save(); };
+          }
+        });
+      }
+      if (b.hasAttribute('data-delv')) {
+        if (!await U.confirm(`למחוק את "${actName()}"?`)) return;
+        const id = act; switchTo('main');
+        drill.variants = drill.variants.filter(v => v.id !== id);
+        renderVariants(); commit();
+      }
+    });
+    // ייצוא של האופציה שמוצגת עכשיו
+    const exportDrill = () => Object.assign({}, drill, { name: act === 'main' && !drill.variants.length ? drill.name : `${drill.name || 'תרגיל'} — ${actName()}` });
+
     U.$('#frames', view).addEventListener('click', async e => {
       const b = e.target.closest('button'); if (!b) return;
       stop();
@@ -541,7 +699,7 @@ const Board = (() => {
         const f = frame();
         const nf = { pos: JSON.parse(JSON.stringify(f.pos)), ball: f.ball ? JSON.parse(JSON.stringify(f.ball)) : null, lines: [], note: '' };
         drill.frames.splice(fi + 1, 0, nf); fi++; t = fi; commit();
-        if (drill.frames.length === 2) U.toast('עכשיו הזז את השחקנים למיקום החדש. הקווים שציירת בשלב הקודם יקבעו את מסלול התנועה.');
+        if (drill.frames.length === 2) U.toast('אפשר להזיז שחקנים ידנית בשלב הזה, או לצייר קווים — הם יבוצעו בהפעלה.');
       }
       if (b.hasAttribute('data-delf')) {
         if (!await U.confirm(`למחוק את שלב ${fi + 1}?`)) return;
@@ -557,7 +715,7 @@ const Board = (() => {
     function stop() { playing = false; cancelAnimationFrame(raf); U.$('#play', view).innerHTML = `${U.icon('play', 18)} הפעלה`; }
     U.$('#play', view).onclick = () => {
       if (playing) { stop(); return; }
-      if (drill.frames.length < 2) { U.toast('הוסף שלב נוסף והזז את השחקנים כדי לראות אנימציה'); return; }
+      if (drill.frames.length < 2) { U.toast('צייר קו ריצה, כדרור או מסירה מאחד השחקנים — והתנועה תופיע בהפעלה'); return; }
       playing = true; U.$('#play', view).innerHTML = `${U.icon('pause', 18)} עצירה`;
       if (t >= drill.frames.length - 1) t = 0;
       let prev = null;
@@ -581,17 +739,20 @@ const Board = (() => {
     /* פרטים */
     U.$('#d-name', view).oninput = e => { drill.name = e.target.value; scheduleSave(); };
     U.$$('[data-f]', view).forEach(inp => inp.addEventListener('input', () => { drill[inp.dataset.f] = inp.value; scheduleSave(); }));
-    U.$('#court', view).onchange = e => {
-      const to = e.target.value;
+    const paintCourtToggle = () => U.$$('[data-court]', view).forEach(b => b.classList.toggle('on', b.dataset.court === drill.court));
+    U.$('#tools', view).addEventListener('click', e => { const b = e.target.closest('[data-court]'); if (b) setCourt(b.dataset.court); });
+    U.$('#court', view).onchange = e => setCourt(e.target.value);
+    function setCourt(to) {
       // המרת מיקומים בין חצי מגרש למגרש מלא
       const conv = to === 'full' ? p => toCourt('full', p) : p => [15 - p[1], 28 - p[0]];
-      drill.frames.forEach(f => {
+      if (to === drill.court) return;
+      allLists().forEach(L => L.forEach(f => {
         Object.keys(f.pos).forEach(k => f.pos[k] = conv(f.pos[k]));
         if (f.ball?.p) f.ball.p = conv(f.ball.p);
         (f.lines || []).forEach(l => l.pts = l.pts.map(conv));
-      });
-      drill.court = to; commit(); resize();
-    };
+      }));
+      drill.court = to; U.$('#court', view).value = to; paintCourtToggle(); commit(); resize();
+    }
     U.$('#ai-desc', view).onclick = async e => {
       const btn = e.currentTarget;
       if (!drill.name.trim() && !drill.objects.length) { U.toast('תן לתרגיל שם או סרטט אותו קודם', true); return; }
@@ -601,7 +762,7 @@ const Board = (() => {
 שם: ${drill.name || 'ללא שם'}
 ${drill.cat ? 'קטגוריה: ' + drill.cat + '\n' : ''}${drill.age ? 'גילאים: ' + drill.age + '\n' : ''}${drill.players ? 'מספר שחקנים: ' + drill.players + '\n' : ''}${drill.duration ? 'משך: ' + drill.duration + ' דקות\n' : ''}מגרש: ${drill.court === 'full' ? 'מלא' : 'חצי'}
 בשרטוט: ${cnt('off')} שחקני התקפה, ${cnt('def')} שחקני הגנה${cnt('cone') ? ', ' + cnt('cone') + ' קונוסים' : ''}${cnt('coach') ? ', מאמן' : ''}. ${drill.frames.length} שלבים.
-קווים: ${Object.entries(lines).map(([k, v]) => ({ run: 'ריצה', dribble: 'כדרור', pass: 'מסירה', screen: 'חסימה' }[k] + ' ×' + v)).join(', ') || 'אין'}
+קווים: ${Object.entries(lines).map(([k, v]) => (LINE_NAMES[k] + ' ×' + v)).join(', ') || 'אין'}
 ${drill.frames.map((f, i) => f.note ? `שלב ${i + 1}: ${f.note}` : '').filter(Boolean).join('\n')}
 ${drill.desc ? 'מה שהמאמן כבר כתב (שמור על הכוונה שלו והשלם): ' + drill.desc : ''}
 
@@ -624,9 +785,9 @@ ${drill.desc ? 'מה שהמאמן כבר כתב (שמור על הכוונה של
     };
 
     /* ייצוא */
-    U.$('#x-video', view).onclick = () => { stop(); videoFlow(drill); };
-    U.$('#x-image', view).onclick = () => imageFlow(drill, fi);
-    U.$('#x-link', view).onclick = () => linkModal(drill);
+    U.$('#x-video', view).onclick = () => { stop(); videoFlow(exportDrill()); };
+    U.$('#x-image', view).onclick = () => imageFlow(exportDrill(), fi);
+    U.$('#x-link', view).onclick = () => linkModal(toStore());
 
     /* מקלדת */
     const onKey = e => {
@@ -634,15 +795,15 @@ ${drill.desc ? 'מה שהמאמן כבר כתב (שמור על הכוונה של
       if (e.target.matches('input,textarea,select')) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) U.$('[data-act=redo]', view).click(); else U.$('[data-act=undo]', view).click(); }
       if ((e.key === 'Delete' || e.key === 'Backspace') && (sel || selLine)) {
-        if (sel) removeObject(sel); else frame().lines = frame().lines.filter(l => l.id !== selLine);
-        sel = selLine = null; commit(); renderSel(); draw();
+        if (sel) removeObject(sel); else { const l = frame().lines.find(x => x.id === selLine); if (l) removeLine(l); }
+        sel = selLine = null; commit(); renderFrames(); renderSel(); draw();
       }
     };
     document.addEventListener('keydown', onKey);
     const ro = new ResizeObserver(() => { if (cv.isConnected) resize(); else ro.disconnect(); });
     ro.observe(U.$('.canvas-box', view));
 
-    setTool('move'); renderFrames(); renderSel(); resize();
+    setTool('move'); paintCourtToggle(); renderVariants(); renderFrames(); renderSel(); resize();
     await ensureFonts(); draw();
   }
 
@@ -652,10 +813,12 @@ ${drill.desc ? 'מה שהמאמן כבר כתב (שמור על הכוונה של
     try { drill = await U.unpackJSON(packed); }
     catch (e) { view.innerHTML = `<div class="empty"><h3>הקישור פגום</h3><p>ייתכן שהוא נחתך בהעתקה. בקש מהשולח לשלוח אותו שוב.</p><a class="btn" href="#/home">למסך הבית</a></div>`; return; }
     drill.objects ||= []; drill.frames ||= [{ pos: {}, lines: [] }];
+    const options = [{ name: drill.mainName || 'מהלך ראשי', frames: drill.frames }, ...(drill.variants || [])];
     let t = 0, playing = false, raf = 0;
     view.innerHTML = `<div class="viewer">
       <div class="page-head"><div><h1>${U.esc(drill.name || 'תרגיל')}</h1>
         <p>${U.esc([drill.cat, drill.age, drill.duration ? drill.duration + ' דקות' : ''].filter(Boolean).join(' · '))}</p></div></div>
+      ${options.length > 1 ? `<div class="variants" id="vopts">${options.map((o, i) => `<button class="var-chip ${i ? '' : 'on'}" data-i="${i}">${U.esc(o.name)}</button>`).join('')}</div>` : ''}
       <div class="canvas-box"><canvas id="cv"></canvas></div>
       <div class="play-row"><button class="btn dark" id="play">${U.icon('play', 18)} הפעלה</button>
         <input type="range" id="scrub" min="0" max="${drill.frames.length - 1}" step="0.01" value="0" aria-label="ציר זמן"></div>
@@ -690,8 +853,17 @@ ${drill.desc ? 'מה שהמאמן כבר כתב (שמור על הכוונה של
       raf = requestAnimationFrame(tick);
     };
     U.$('#scrub', view).oninput = e => { stop(); t = +e.target.value; draw(); };
+    const vo = U.$('#vopts', view);
+    if (vo) vo.onclick = e => {
+      const b = e.target.closest('[data-i]'); if (!b) return;
+      stop(); drill.frames = options[+b.dataset.i].frames; t = 0;
+      U.$$('.var-chip', vo).forEach(c => c.classList.toggle('on', c === b));
+      const sc = U.$('#scrub', view); sc.max = drill.frames.length - 1; sc.value = 0;
+      draw(); if (drill.frames.length > 1) btn.click();
+    };
     U.$('#keep', view).onclick = async () => {
-      const d = Object.assign(newDrill(), drill, { id: DB.uid(), tags: '' });
+      const d = Object.assign(newDrill(), drill, { id: DB.uid(), tags: '', frames: options[0].frames,
+        variants: (drill.variants || []).map((v, i) => ({ id: 'v' + (900 + i), name: v.name, frames: v.frames })) });
       d.seq = 1000; d.thumb = Court.thumbnail(d);
       await DB.put('drills', d);
       U.toast('התרגיל נשמר בספרייה');

@@ -129,6 +129,14 @@ const Court = (() => {
         const L = 0.45, px = -Math.sin(ang) * L, py = Math.cos(ang) * L;
         ctx.lineWidth = 0.14;
         ctx.beginPath(); ctx.moveTo(tip[0] + px, tip[1] + py); ctx.lineTo(tip[0] - px, tip[1] - py); ctx.stroke();
+      } else if (line.type === 'handoff') {
+        // הנד-אוף: שני פסים מקבילים בסוף הקו
+        const L = 0.38, px = -Math.sin(ang) * L, py = Math.cos(ang) * L, bx = Math.cos(ang) * 0.22, by = Math.sin(ang) * 0.22;
+        ctx.lineWidth = 0.12;
+        ctx.beginPath();
+        ctx.moveTo(tip[0] + px, tip[1] + py); ctx.lineTo(tip[0] - px, tip[1] - py);
+        ctx.moveTo(tip[0] - bx + px, tip[1] - by + py); ctx.lineTo(tip[0] - bx - px, tip[1] - by - py);
+        ctx.stroke();
       } else arrowHead(ctx, tip, ang);
     }
     ctx.restore();
@@ -234,9 +242,11 @@ const Court = (() => {
     if (b0.h && b0.h === b1.h) return ballPos(b0, t);
     const a = ballPos(b0, t), b = ballPos(b1, t);
     if (!a || !b) return a || b;
-    if (f < .2) return a;
-    if (f > .75) return b;
-    return lerp(a, b, ease((f - .2) / .55));
+    // מסירה עוברת באמצע התנועה; הנד-אוף — רק כשהשחקנים נפגשים בסוף
+    const [w0, w1] = b1.via === 'handoff' ? [.78, .95] : [.2, .75];
+    if (f < w0) return a;
+    if (f > w1) return b;
+    return lerp(a, b, ease((f - w0) / (w1 - w0)));
   }
 
   /* ---------- ציור מלא ---------- */

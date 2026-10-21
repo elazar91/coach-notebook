@@ -30,7 +30,7 @@ const AI = (() => {
     return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
   }
 
-  function manualFlow(prompt, imageCount) {
+  function manualFlow(prompt, imageCount, needsCard = false) {
     return new Promise(resolve => {
       const full = prompt.startsWith(SYSTEM) ? prompt : SYSTEM + '\n\n' + prompt;
       U.modal({
@@ -42,7 +42,7 @@ const AI = (() => {
           <details style="margin:10px 0"><summary class="small muted" style="cursor:pointer">הצגת השאלה שתישלח</summary>
             <textarea class="input" readonly rows="8" style="margin-top:8px;font-size:.85rem">${U.esc(full)}</textarea></details>
           <label class="field"><span>התשובה של Claude</span><textarea class="input" id="ans" rows="8" placeholder="הדבק כאן"></textarea></label>
-          <p class="hint" style="margin-top:10px">רוצה שהתשובה תגיע ישר לכאן? התחבר לגיבוי בענן בהגדרות (קוד PIN), ומאז Claude עונה אוטומטית.</p>`,
+          ${needsCard ? '<p class="hint" style="margin-top:10px">כדי ש-Claude יענה כאן אוטומטית, צריך להוסיף פעם אחת כרטיס אשראי בחשבון ה-Vercel (לאימות בלבד — לא מחויב, יש 5$ חינם בחודש).</p>' : '<p class="hint" style="margin-top:10px">רוצה שהתשובה תגיע ישר לכאן? התחבר לגיבוי בענן בהגדרות (קוד PIN), ומאז Claude עונה אוטומטית.</p>'}`,
         foot: `<button class="btn primary" data-copy>${U.icon('copy', 18)} העתקה ופתיחת Claude</button>
           <button class="btn dark" data-save>שמירת התשובה</button><button class="btn" data-close>ביטול</button>`,
         onOpen: (m, close) => {
@@ -78,7 +78,14 @@ const AI = (() => {
   async function ask(prompt, images = [], system) {
     const s = await DB.settings();
     if (s.apiKey) return callAPI(s, prompt, images, system);
-    if (Sync.isOn() && location.protocol.startsWith('http') && !/^(localhost|127\.)/.test(location.hostname)) return callServer(prompt, images, system);
+    if (Sync.isOn() && location.protocol.startsWith('http') && !/^(localhost|127\.)/.test(location.hostname)) {
+      try { return await callServer(prompt, images, system); }
+      catch (e) {
+        // החיבור האוטומטי עוד לא פעיל (למשל חסר כרטיס ב-Vercel) — ממשיכים בהעתק-הדבק
+        if (!/credit card|gateway|לא זמין/i.test(e.message)) throw e;
+        return manualFlow((system ? system + '\n\n' : '') + prompt, images.length, true);
+      }
+    }
     return manualFlow((system ? system + '\n\n' : '') + prompt, images.length);
   }
   /* האם התשובה תגיע ישר לאתר (בלי העתק-הדבק) */
