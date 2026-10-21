@@ -1,0 +1,11 @@
+{
+  "name": "מחברת המאמן",
+  "short_name": "המאמן",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./#/home",
+  "display": "standalone",
+  "background_color": "#eef1f4",
+  "theme_color": "#14213d",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
