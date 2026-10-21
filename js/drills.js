@@ -28,6 +28,7 @@ const Drills = (() => {
           <div class="body">
             <h3>${U.esc(d.name || 'תרגיל ללא שם')}</h3>
             <div class="meta">${[d.cat, d.age, d.duration ? d.duration + ' דק׳' : '', d.frames.length > 1 ? d.frames.length + ' שלבים' : ''].filter(Boolean).map(U.esc).join(' · ') || '&nbsp;'}</div>
+            ${d.desc ? `<p class="desc">${U.esc(d.desc)}</p>` : ''}
             ${d.tags ? `<div class="row" style="gap:4px">${d.tags.split(',').map(t => t.trim()).filter(Boolean).slice(0, 4).map(t => `<span class="tag">${U.esc(t)}</span>`).join('')}</div>` : ''}
           </div>
           <div class="actions">

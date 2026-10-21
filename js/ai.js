@@ -7,7 +7,7 @@ const AI = (() => {
 כשאתה מציע אימון, אתה כותב מבנה עם זמנים בדקות, שם לכל תרגיל, איך מארגנים אותו (חלוקה, ציוד, מיקום במגרש) ונקודת לימוד אחת או שתיים.
 כשאתה מתייחס לסדר וארגון האימון, אתה נותן הרגלים קונקרטיים שאפשר ליישם כבר באימון הבא.`;
 
-  async function callAPI(settings, prompt, images) {
+  async function callAPI(settings, prompt, images, system) {
     const content = [];
     for (const img of images.slice(0, 4)) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: img } });
     content.push({ type: 'text', text: prompt });
@@ -19,7 +19,7 @@ const AI = (() => {
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
-      body: JSON.stringify({ model: settings.model || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM, messages: [{ role: 'user', content }] }),
+      body: JSON.stringify({ model: settings.model || 'claude-sonnet-5-5', max_tokens: 2500, system: system || SYSTEM, messages: [{ role: 'user', content }] }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -32,7 +32,7 @@ const AI = (() => {
 
   function manualFlow(prompt, imageCount) {
     return new Promise(resolve => {
-      const full = SYSTEM + '\n\n' + prompt;
+      const full = prompt.startsWith(SYSTEM) ? prompt : SYSTEM + '\n\n' + prompt;
       U.modal({
         title: 'התייעצות עם Claude', wide: true,
         body: `<ol class="small" style="padding-inline-start:20px;margin-top:0">
@@ -42,7 +42,7 @@ const AI = (() => {
           <details style="margin:10px 0"><summary class="small muted" style="cursor:pointer">הצגת השאלה שתישלח</summary>
             <textarea class="input" readonly rows="8" style="margin-top:8px;font-size:.85rem">${U.esc(full)}</textarea></details>
           <label class="field"><span>התשובה של Claude</span><textarea class="input" id="ans" rows="8" placeholder="הדבק כאן"></textarea></label>
-          <p class="hint" style="margin-top:10px">רוצה שהתשובה תגיע ישר לכאן? אפשר להוסיף מפתח API בהגדרות.</p>`,
+          <p class="hint" style="margin-top:10px">רוצה שהתשובה תגיע ישר לכאן? התחבר לגיבוי בענן בהגדרות (קוד PIN), ומאז Claude עונה אוטומטית.</p>`,
         foot: `<button class="btn primary" data-copy>${U.icon('copy', 18)} העתקה ופתיחת Claude</button>
           <button class="btn dark" data-save>שמירת התשובה</button><button class="btn" data-close>ביטול</button>`,
         onOpen: (m, close) => {
@@ -61,13 +61,36 @@ const AI = (() => {
     });
   }
 
-  /* prompt: טקסט השאלה, images: מערך base64 של JPEG (בלי הקידומת) */
-  async function ask(prompt, images = []) {
-    const s = await DB.settings();
-    if (s.apiKey) return callAPI(s, prompt, images);
-    return manualFlow(prompt, images.length);
+  /* דרך האתר ב-Vercel: עובד לכל מי שמחובר לגיבוי בענן, בלי מפתח */
+  async function callServer(prompt, images, system) {
+    const token = await Sync.token();
+    const r = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ prompt, images, system: system || SYSTEM }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Claude לא ענה. נסה שוב בעוד רגע.');
+    return (j.text || '').trim();
   }
-  async function hasKey() { return !!(await DB.settings()).apiKey; }
 
-  return { ask, hasKey, callAPI };
+  /* prompt: טקסט השאלה, images: מערך base64 של JPEG (בלי הקידומת) */
+  async function ask(prompt, images = [], system) {
+    const s = await DB.settings();
+    if (s.apiKey) return callAPI(s, prompt, images, system);
+    if (Sync.isOn() && location.protocol.startsWith('http') && !/^(localhost|127\.)/.test(location.hostname)) return callServer(prompt, images, system);
+    return manualFlow((system ? system + '\n\n' : '') + prompt, images.length);
+  }
+  /* האם התשובה תגיע ישר לאתר (בלי העתק-הדבק) */
+  async function direct() { return !!(await DB.settings()).apiKey || (Sync.isOn() && !/^(localhost|127\.)/.test(location.hostname)); }
+  async function hasKey() { return direct(); }
+
+  /* תשובה כ-JSON: מחלץ את האובייקט הראשון מהטקסט */
+  function parseJSON(text) {
+    if (!text) return null;
+    const m = text.match(/\{[\s\S]*\}/);
+    try { return JSON.parse(m ? m[0] : text); } catch (e) { return null; }
+  }
+
+  return { ask, hasKey, direct, callAPI, parseJSON, SYSTEM };
 })();

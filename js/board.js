@@ -295,7 +295,8 @@ const Board = (() => {
                 <label class="field"><span>משך (דק׳)</span><input class="input" data-f="duration" type="number" min="0" value="${U.esc(drill.duration)}"></label>
               </div>
               <label class="field"><span>מספר שחקנים</span><input class="input" data-f="players" value="${U.esc(drill.players)}" placeholder="למשל 8-12"></label>
-              <label class="field"><span>הסבר ונקודות לימוד</span><textarea class="input" data-f="desc" rows="4" placeholder="מטרת התרגיל, איך מתחילים, על מה לשים דגש">${U.esc(drill.desc)}</textarea></label>
+              <label class="field"><span>מה עושים ומה המטרה</span><textarea class="input" data-f="desc" id="d-desc" rows="5" placeholder="איך מארגנים, מה עושים, מה המטרה ועל מה לשים דגש">${U.esc(drill.desc)}</textarea></label>
+              <button class="btn sm" id="ai-desc" style="align-self:flex-start">${U.icon('sparkles', 16)} Claude יכתוב הסבר</button>
               <label class="field"><span>תגיות</span><input class="input" data-f="tags" value="${U.esc(drill.tags)}" placeholder="פיק אנד רול, לייאפ, יד חלשה"></label>
               <button class="btn danger" id="del-drill">${U.icon('trash', 18)} מחיקת התרגיל</button>
             </div>
@@ -590,6 +591,31 @@ const Board = (() => {
         (f.lines || []).forEach(l => l.pts = l.pts.map(conv));
       });
       drill.court = to; commit(); resize();
+    };
+    U.$('#ai-desc', view).onclick = async e => {
+      const btn = e.currentTarget;
+      if (!drill.name.trim() && !drill.objects.length) { U.toast('תן לתרגיל שם או סרטט אותו קודם', true); return; }
+      const cnt = t => drill.objects.filter(o => o.t === t).length;
+      const lines = {}; drill.frames.forEach(f => (f.lines || []).forEach(l => lines[l.type] = (lines[l.type] || 0) + 1));
+      const prompt = `כתוב הסבר לתרגיל כדורסל ששורטט בלוח הטקטי.
+שם: ${drill.name || 'ללא שם'}
+${drill.cat ? 'קטגוריה: ' + drill.cat + '\n' : ''}${drill.age ? 'גילאים: ' + drill.age + '\n' : ''}${drill.players ? 'מספר שחקנים: ' + drill.players + '\n' : ''}${drill.duration ? 'משך: ' + drill.duration + ' דקות\n' : ''}מגרש: ${drill.court === 'full' ? 'מלא' : 'חצי'}
+בשרטוט: ${cnt('off')} שחקני התקפה, ${cnt('def')} שחקני הגנה${cnt('cone') ? ', ' + cnt('cone') + ' קונוסים' : ''}${cnt('coach') ? ', מאמן' : ''}. ${drill.frames.length} שלבים.
+קווים: ${Object.entries(lines).map(([k, v]) => ({ run: 'ריצה', dribble: 'כדרור', pass: 'מסירה', screen: 'חסימה' }[k] + ' ×' + v)).join(', ') || 'אין'}
+${drill.frames.map((f, i) => f.note ? `שלב ${i + 1}: ${f.note}` : '').filter(Boolean).join('\n')}
+${drill.desc ? 'מה שהמאמן כבר כתב (שמור על הכוונה שלו והשלם): ' + drill.desc : ''}
+
+כתוב בעברית פשוטה, בפורמט הזה בדיוק (בלי כותרות נוספות):
+מה עושים: 2-4 משפטים — ארגון, מהלך התרגיל וכללים.
+מטרה: משפט אחד.
+דגשים: 2-3 נקודות לימוד קצרות, מופרדות בפסיק.
+אם השם לא מוכר לך, כתוב את הפרשנות הסבירה ביותר לפי השרטוט והשם, והתחל במילה "(הנחה)".`;
+      const label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Claude כותב…';
+      try {
+        const ans = await AI.ask(prompt, [], 'אתה מאמן כדורסל בכיר שכותב תיעוד קצר ומעשי לתרגילים.');
+        if (ans) { drill.desc = ans.trim(); U.$('#d-desc', view).value = drill.desc; scheduleSave(); U.toast('ההסבר נכתב — אפשר לערוך אותו'); }
+      } catch (err) { U.toast(err.message, true); }
+      finally { btn.disabled = false; btn.innerHTML = label; }
     };
     U.$('#del-drill', view).onclick = async () => {
       if (!await U.confirm('למחוק את התרגיל לצמיתות?')) return;

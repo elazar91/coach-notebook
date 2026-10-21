@@ -52,7 +52,7 @@ const Sync = (() => {
     if (!client) throw new Error('אין חיבור לשירות הענן. בדוק את החיבור לאינטרנט ורענן את הדף.');
     const { data, error } = await client.auth.signInWithPassword({ email: email.trim(), password });
     if (error) {
-      if (/invalid/i.test(error.message)) throw new Error('האימייל או הסיסמה לא נכונים.');
+      if (/invalid/i.test(error.message)) throw new Error('קוד PIN שגוי, נסה שוב');
       throw new Error(error.message);
     }
     user = data.user;
@@ -163,9 +163,13 @@ const Sync = (() => {
     return changed;
   }
 
+  async function token() {
+    if (!client || !user) return null;
+    try { const { data } = await client.auth.getSession(); return data.session?.access_token || null; } catch (e) { return null; }
+  }
   function onChange(f) { listeners.add(f); f(info()); return () => listeners.delete(f); }
   /* אחרי מחיקה מקומית של הכל: למשוך מחדש מהענן */
   function resetCursor() { ls.del(LS_PULL); ls.del(LS_OUT); }
 
-  return { init, track, signIn, signOut, run, onChange, info, resetCursor, isOn: () => !!user };
+  return { init, track, signIn, signOut, run, onChange, info, resetCursor, token, isOn: () => !!user };
 })();

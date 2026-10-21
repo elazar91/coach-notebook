@@ -17,8 +17,8 @@ const Settings = (() => {
             </div>
           </div>
           <div class="panel">
-            <div class="panel-head"><h2>התייעצות עם Claude</h2></div>
-            <p class="small">בלי מפתח, האתר מכין את השאלה ופותח את Claude בחלון חדש. עם מפתח API התשובה מגיעה ישר לאימון, כולל ניתוח התמונות.</p>
+            <div class="panel-head"><h2>מפתח API (לא חובה)</h2></div>
+            <p class="small">כשאתה מחובר לגיבוי בענן, Claude כבר עונה ישר באתר וקורא תמונות, בלי מפתח. מפתח API אישי צריך רק אם תרצה מודל חזק יותר או כשאתה לא מחובר.</p>
             <div class="stack">
               <label class="field"><span>מפתח API</span><input class="input" id="key" type="password" dir="ltr" value="${U.esc(s.apiKey)}" placeholder="sk-ant-..." autocomplete="off"></label>
               <label class="field"><span>מודל</span><input class="input" id="model" dir="ltr" value="${U.esc(s.model)}"></label>
@@ -56,18 +56,23 @@ const Settings = (() => {
       }
       if (!i.email) {
         cloud.innerHTML = `<div class="panel-head"><h2>גיבוי בענן</h2><span class="small"><span class="cloud-dot" style="background:var(--danger)"></span>לא מחובר</span></div>
-          <p class="small">אחרי התחברות כל מה ששמור באתר עולה לענן, ומופיע בכל מכשיר שתתחבר בו. אותו אימייל וסיסמה של האתר "סדר את החיים".</p>
+          <p class="small">נכנסים עם אותו קוד PIN של "סדר את החיים". מאותו רגע הכל מגובה בענן, מופיע בכל מכשיר, ו-Claude עונה ישר באתר.</p>
           ${i.error ? `<p class="hint" style="color:var(--danger)">${U.esc(i.error)}</p>` : ''}
-          <form class="stack" id="login">
-            <label class="field"><span>אימייל</span><input class="input" id="em" type="email" dir="ltr" autocomplete="username" value="${U.esc(CONFIG.defaultEmail)}"></label>
-            <label class="field"><span>סיסמה</span><input class="input" id="pw" type="password" dir="ltr" autocomplete="current-password"></label>
-            <button class="btn primary" type="submit" style="align-self:flex-start">התחברות</button>
+          <form class="stack" id="login" style="max-width:280px">
+            <input class="input" id="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" placeholder="••••" aria-label="קוד PIN" style="text-align:center;font-size:1.6rem;letter-spacing:.4em;direction:ltr">
+            <p class="small" id="pin-err" style="color:var(--danger);margin:0;min-height:1.2em"></p>
+            <button class="btn primary" type="submit" disabled>כניסה</button>
+            <details class="small muted"><summary style="cursor:pointer">כניסה עם משתמש אחר</summary>
+              <input class="input" id="em" type="email" dir="ltr" autocomplete="username" value="${U.esc(CONFIG.defaultEmail)}" style="margin-top:8px"></details>
           </form>`;
+        const pin = U.$('#pin', cloud), btn = U.$('#login button', cloud), perr = U.$('#pin-err', cloud);
+        pin.oninput = () => { pin.value = pin.value.replace(/\D/g, ''); btn.disabled = pin.value.length < 4; perr.textContent = ''; };
         U.$('#login', cloud).onsubmit = async e => {
           e.preventDefault();
-          const b = e.target.querySelector('button'); b.disabled = true; b.textContent = 'מתחבר…';
-          try { await Sync.signIn(U.$('#em', cloud).value, U.$('#pw', cloud).value); U.toast('מחובר. הנתונים מגובים בענן'); }
-          catch (err) { U.toast(err.message, true); b.disabled = false; b.textContent = 'התחברות'; }
+          if (!/^\d{4,8}$/.test(pin.value)) { perr.textContent = 'קוד PIN צריך להכיל בין 4 ל-8 ספרות'; return; }
+          btn.disabled = true; btn.textContent = 'נכנס…';
+          try { await Sync.signIn(U.$('#em', cloud).value, pin.value); U.toast('מחובר. הנתונים מגובים בענן'); }
+          catch (err) { perr.textContent = err.message; pin.value = ''; pin.focus(); btn.textContent = 'כניסה'; }
         };
         return;
       }

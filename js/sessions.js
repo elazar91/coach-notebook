@@ -54,7 +54,7 @@ const Sessions = (() => {
       }
       const q = U.norm(filter.q);
       const L = all.filter(s => (!filter.team || s.team === filter.team) &&
-        (!q || U.norm([s.team, s.goal, s.worked, s.improve, s.players, s.prep, ...(s.plan || []).map(p => p.title)].join(' ')).includes(q)));
+        (!q || U.norm([s.team, s.goal, s.worked, s.improve, s.players, s.prep, ...(s.plan || []).map(p => [p.title, p.what, p.goal].join(' '))].join(' ')).includes(q)));
       rows.innerHTML = L.length ? `<div class="list">${L.map(s => {
         const d = U.parseISO(s.date), sc = orgScore(s);
         return `<a class="session-row" href="#/session/${s.id}">
@@ -113,7 +113,7 @@ const Sessions = (() => {
           </div>
           <div class="panel">
             <div class="panel-head"><h2>מבנה האימון</h2>
-              <div class="row"><button class="btn sm" id="add-drill">${U.icon('drills', 16)} מהספרייה</button><button class="btn sm" id="add-free">${U.icon('plus', 16)} חלק חופשי</button></div></div>
+              <div class="row"><button class="btn sm primary" id="add-photo">${U.icon('image', 16)} תרגיל מתמונה</button><button class="btn sm" id="add-drill">${U.icon('drills', 16)} מהספרייה</button><button class="btn sm" id="add-free">${U.icon('plus', 16)} חלק חופשי</button></div></div>
             <div id="plan"></div>
           </div>
           <div class="panel">
@@ -153,21 +153,52 @@ const Sessions = (() => {
     U.$$('[data-f]', view).forEach(inp => inp.addEventListener('input', () => { s[inp.dataset.f] = inp.value; setTitle(); touch(); if (inp.dataset.f === 'duration') paintPlan(); }));
 
     /* מבנה */
-    function paintPlan() {
+    const planUrls = [];
+    const drillOf = r => r.drillId && drills.find(x => x.id === r.drillId);
+    const detailsOf = r => {
+      const d = drillOf(r);
+      return { what: r.what || (d && d.desc) || '', goal: r.goal || '' };
+    };
+    async function paintPlan() {
       const box = U.$('#plan', view);
-      if (!s.plan.length) { box.innerHTML = `<p class="muted small">הוסף תרגילים מהספרייה או חלקים חופשיים (חימום, משחק, סיכום) עם זמנים.</p>`; return; }
+      planUrls.forEach(URL.revokeObjectURL); planUrls.length = 0;
+      if (!s.plan.length) { box.innerHTML = `<p class="muted small">צלם את הלוח או את דף התרגילים ולחץ "תרגיל מתמונה", או הוסף מהספרייה וחלקים חופשיים (חימום, משחק, סיכום).</p>`; return; }
       const total = planMinutes(s), target = +s.duration || 0;
-      box.innerHTML = s.plan.map((r, i) => `
-        <div class="plan-row" data-i="${i}">
-          <span class="plan-num">${i + 1}</span>
-          <div style="min-width:0">${r.drillId ? `<a class="title" href="#/board/${r.drillId}">${U.esc(r.title)}</a>` : `<input class="input" data-pf="title" value="${U.esc(r.title)}" placeholder="שם החלק" style="min-height:36px;padding:5px 8px">`}</div>
-          <input class="input" type="number" min="0" data-pf="min" value="${U.esc(r.min)}" aria-label="דקות" style="min-height:36px;padding:5px 8px" placeholder="דק׳">
-          <div class="row" style="gap:2px;flex-wrap:nowrap">
-            <button class="btn sm icon ghost" data-mv="-1" title="למעלה" ${i === 0 ? 'disabled' : ''}>${U.icon('up', 16)}</button>
-            <button class="btn sm icon ghost" data-mv="1" title="למטה" ${i === s.plan.length - 1 ? 'disabled' : ''}>${U.icon('down', 16)}</button>
-            <button class="btn sm icon ghost danger" data-rm title="הסרה">${U.icon('x', 16)}</button></div>
-        </div>`).join('') +
-        `<div class="plan-total"><span>סה״כ</span><span style="color:${target && total > target ? 'var(--danger)' : 'inherit'}">${total} דק׳${target ? ` מתוך ${target}` : ''}</span></div>`;
+      const thumbs = {};
+      for (const r of s.plan) if (r.photoId) { const f = await DB.getFile(r.photoId); if (f) { const u = URL.createObjectURL(f.blob); planUrls.push(u); thumbs[r.id] = u; } }
+      const missing = s.plan.filter(r => { const d = detailsOf(r); return !d.what && (r.title || '').trim(); }).length;
+      box.innerHTML = s.plan.map((r, i) => {
+        const d = detailsOf(r);
+        return `
+        <div class="plan-item" data-i="${i}">
+          <div class="plan-row">
+            <span class="plan-num">${i + 1}</span>
+            <div style="min-width:0">${r.drillId ? `<a class="title" href="#/board/${r.drillId}">${U.esc(r.title)}</a>` : `<input class="input" data-pf="title" value="${U.esc(r.title)}" placeholder="שם החלק" style="min-height:36px;padding:5px 8px">`}</div>
+            <input class="input" type="number" min="0" data-pf="min" value="${U.esc(r.min)}" aria-label="דקות" style="min-height:36px;padding:5px 8px" placeholder="דק׳">
+            <div class="row" style="gap:2px;flex-wrap:nowrap">
+              <button class="btn sm icon ghost" data-mv="-1" title="למעלה" ${i === 0 ? 'disabled' : ''}>${U.icon('up', 16)}</button>
+              <button class="btn sm icon ghost" data-mv="1" title="למטה" ${i === s.plan.length - 1 ? 'disabled' : ''}>${U.icon('down', 16)}</button>
+              <button class="btn sm icon ghost danger" data-rm title="הסרה">${U.icon('x', 16)}</button></div>
+          </div>
+          <div class="plan-details">
+            ${thumbs[r.id] ? `<img class="plan-thumb" src="${thumbs[r.id]}" alt="תמונת התרגיל" data-view>` : ''}
+            <div class="grow" style="min-width:0">
+              ${r.editing ? `
+                <label class="field"><span>מה עושים</span><textarea class="input" data-pf="what" rows="3">${U.esc(r.what || d.what)}</textarea></label>
+                <label class="field" style="margin-top:6px"><span>מטרה</span><input class="input" data-pf="goal" value="${U.esc(r.goal || '')}"></label>
+                <button class="btn sm" data-done style="margin-top:6px">סיום עריכה</button>`
+              : d.what || d.goal ? `
+                ${d.what ? `<p class="small" style="margin:0"><b>מה עושים:</b> ${U.esc(d.what)}</p>` : ''}
+                ${d.goal ? `<p class="small" style="margin:2px 0 0"><b>מטרה:</b> ${U.esc(d.goal)}</p>` : ''}
+                <button class="btn sm ghost" data-edit style="padding:2px 6px;min-height:28px">${U.icon('edit', 14)} עריכה</button>`
+              : `<span class="small muted">אין פירוט.</span> <button class="btn sm ghost" data-edit style="padding:2px 6px;min-height:28px">כתיבה ידנית</button>`}
+            </div>
+          </div>
+        </div>`;
+      }).join('') +
+        `<div class="plan-total"><span>סה״כ</span><span style="color:${target && total > target ? 'var(--danger)' : 'inherit'}">${total} דק׳${target ? ` מתוך ${target}` : ''}</span></div>` +
+        (missing ? `<div class="row" style="margin-top:10px"><button class="btn sm" id="fill-details">${U.icon('sparkles', 16)} Claude ישלים פירוט ל-${missing === 1 ? 'תרגיל אחד' : missing + ' תרגילים'}</button><span class="small muted">מה עושים ומה המטרה, כדי שתדע בדיוק למה התכוונת גם בעוד חודשים</span></div>` : '');
+      const fb = U.$('#fill-details', box); if (fb) fb.onclick = () => fillDetails(fb);
     }
     U.$('#plan', view).addEventListener('input', e => {
       const row = e.target.closest('[data-i]'); if (!row || !e.target.dataset.pf) return;
@@ -175,12 +206,100 @@ const Sessions = (() => {
       if (e.target.dataset.pf === 'min') { const t = U.$('.plan-total span:last-child', view); const total = planMinutes(s), target = +s.duration || 0; t.textContent = `${total} דק׳${target ? ` מתוך ${target}` : ''}`; t.style.color = target && total > target ? 'var(--danger)' : 'inherit'; }
     });
     U.$('#plan', view).addEventListener('click', e => {
+      if (e.target.matches('[data-view]')) { U.modal({ title: 'תמונת התרגיל', wide: true, body: `<div class="lightbox"><img src="${e.target.src}" alt=""></div>` }); return; }
       const b = e.target.closest('button'); const row = e.target.closest('[data-i]'); if (!b || !row) return;
-      const i = +row.dataset.i;
+      const i = +row.dataset.i, r = s.plan[i];
       if (b.dataset.mv) { const j = i + +b.dataset.mv; [s.plan[i], s.plan[j]] = [s.plan[j], s.plan[i]]; }
-      if (b.hasAttribute('data-rm')) s.plan.splice(i, 1);
+      else if (b.hasAttribute('data-rm')) { s.plan.splice(i, 1); if (r.photoId) DB.del('files', r.photoId); }
+      else if (b.hasAttribute('data-edit')) { if (!r.what) r.what = detailsOf(r).what; r.editing = true; }
+      else if (b.hasAttribute('data-done')) { delete r.editing; }
+      else return;
       touch(); paintPlan();
     });
+
+    /* Claude משלים פירוט: מה עושים ומה המטרה */
+    const DETAIL_RULES = `לכל תרגיל כתוב:
+- what: 2-4 משפטים קצרים — איך מארגנים (חלוקה, ציוד, מיקום במגרש), מה עושים, וכלל או דגש מרכזי.
+- goal: משפט אחד — מה המטרה המקצועית של התרגיל.
+אם שם התרגיל לא מוכר לך, כתוב את הפרשנות הסבירה ביותר לפי השם, ההקשר והגיל, והתחל את what במילה "(הנחה)".
+כתוב בעברית פשוטה וישירה, כמו מאמן שכותב לעצמו.`;
+    async function fillDetails(btn) {
+      const todo = s.plan.map((r, i) => ({ r, i })).filter(({ r }) => !detailsOf(r).what && (r.title || '').trim());
+      if (!todo.length) return;
+      const prompt = `מאמן כדורסל רשם את התרגילים הבאים באימון.
+קבוצה: ${s.team || 'לא צוין'}${s.goal ? `. מטרת האימון: ${s.goal}` : ''}.
+התרגילים:
+${todo.map(({ r, i }) => `${i}. ${r.title}${r.min ? ` (${r.min} דק׳)` : ''}`).join('\n')}
+
+${DETAIL_RULES}
+החזר JSON בלבד, בלי טקסט נוסף, בפורמט: {"items":[{"i":<המספר שליד התרגיל>,"what":"...","goal":"..."}]}`;
+      const label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Claude כותב…';
+      try {
+        const ans = await AI.ask(prompt, [], 'אתה מאמן כדורסל בכיר שכותב תיעוד מקצועי וקצר של תרגילים. אתה מחזיר JSON תקין בלבד.');
+        if (ans === null) return;
+        const j = AI.parseJSON(ans);
+        if (!j?.items) { U.toast('לא הצלחתי לקרוא את התשובה. נסה שוב.', true); return; }
+        let n = 0;
+        for (const it of j.items) { const r = s.plan[+it.i]; if (r && !r.what) { r.what = it.what || ''; r.goal = it.goal || ''; n++; } }
+        touch(); paintPlan(); U.toast(n === 1 ? 'נוסף פירוט לתרגיל' : `נוסף פירוט ל-${n} תרגילים`);
+      } catch (e) { U.toast(e.message, true); }
+      finally { if (btn.isConnected) { btn.disabled = false; btn.innerHTML = label; } }
+    }
+
+    /* תרגיל מתמונה: לבחור אם לשמור את התמונה או רק תיעוד כתוב */
+    U.$('#add-photo', view).onclick = () => {
+      U.modal({
+        title: 'תרגיל מתמונה',
+        body: `<p class="small">צלם את הלוח, דף התכנית או התרגיל במגרש. Claude יזהה את התרגילים ויכתוב לכל אחד מה עושים ומה המטרה.</p>
+          <div class="choices">
+            <label class="choice"><input type="radio" name="keep" value="1" checked>
+              <span><b>${U.icon('image', 16)} לשמור את התמונה + תיעוד כתוב</b><span class="small muted">התמונה נשמרת ליד התרגיל, וההסבר מתחתיה</span></span></label>
+            <label class="choice"><input type="radio" name="keep" value="0">
+              <span><b>${U.icon('note', 16)} רק תיעוד כתוב</b><span class="small muted">רק ההסבר נשמר, כדי לדעת מה עשית. התמונה נמחקת אחרי הקריאה</span></span></label>
+          </div>
+          <div id="ph-state" class="small" style="min-height:1.4em;margin-top:10px"></div>`,
+        foot: `<label class="btn primary" id="ph-pick">${U.icon('upload', 18)} בחירת תמונה<input type="file" id="ph2" accept="image/*" multiple hidden></label><button class="btn" data-close>ביטול</button>`,
+        onOpen: (m, close) => {
+          m.querySelector('#ph2').onchange = async e => {
+            const files = [...e.target.files]; e.target.value = '';
+            if (!files.length) return;
+            const keep = m.querySelector('input[name=keep]:checked').value === '1';
+            const state = m.querySelector('#ph-state');
+            m.querySelector('#ph-pick').classList.add('hidden');
+            try {
+              state.textContent = 'מכין את התמונה…';
+              const imgs = [], saved = [];
+              for (const f of files.slice(0, 4)) {
+                const small = await U.compressImage(f, 1280, .8);
+                imgs.push((await U.blobToDataURL(small)).split(',')[1]);
+                if (keep) saved.push(await DB.saveFile(await U.compressImage(f), f.name));
+              }
+              state.textContent = 'Claude קורא את התמונה וכותב תיעוד…';
+              const prompt = `בתמונה${files.length > 1 ? 'ות' : ''} תיעוד של תרגיל או תרגילים שמאמן כדורסל העביר באימון (לוח מחיק, דף, שרטוט או צילום מהמגרש).
+קבוצה: ${s.team || 'לא צוין'}${s.goal ? `. מטרת האימון: ${s.goal}` : ''}.
+זהה כל תרגיל שמופיע. לכל תרגיל תן title (שם קצר וברור), minutes (משך אם מופיע או אם אפשר להעריך, אחרת null), ו-what ו-goal לפי הכללים:
+${DETAIL_RULES}
+אם לא רואים בתמונה תרגיל כדורסל, החזר רשימה ריקה.
+החזר JSON בלבד, בלי טקסט נוסף, בפורמט: {"drills":[{"title":"...","minutes":10,"what":"...","goal":"..."}]}`;
+              const ans = await AI.ask(prompt, imgs, 'אתה מאמן כדורסל בכיר שמתעד תרגילים מתוך תמונות. אתה מחזיר JSON תקין בלבד.');
+              if (ans === null) { for (const id of saved) await DB.del('files', id); close(); return; }
+              const j = AI.parseJSON(ans);
+              let list = j?.drills;
+              if (!Array.isArray(list)) list = [{ title: 'תרגיל מתמונה', minutes: null, what: ans.slice(0, 1500), goal: '' }];
+              if (!list.length) { state.textContent = 'לא זיהיתי תרגיל בתמונה. נסה צילום קרוב וברור יותר.'; m.querySelector('#ph-pick').classList.remove('hidden'); for (const id of saved) await DB.del('files', id); return; }
+              list.forEach((d, k) => s.plan.push({ id: DB.uid(), title: d.title || 'תרגיל', min: d.minutes ? String(d.minutes) : '', what: d.what || '', goal: d.goal || '', photoId: keep ? saved[Math.min(k, saved.length - 1)] : undefined, source: 'photo' }));
+              // תמונות נוספות (מעבר לתרגילים שזוהו) עוברות לגלריית האימון כדי שלא ילכו לאיבוד
+              if (keep && saved.length > list.length) s.photos.push(...saved.slice(list.length));
+              touch(); paintPlan(); if (keep) paintPhotos();
+              close(); U.toast(list.length === 1 ? 'התרגיל נוסף עם תיעוד' : `נוספו ${list.length} תרגילים עם תיעוד`);
+            } catch (err) {
+              state.textContent = err.message; state.style.color = 'var(--danger)';
+              m.querySelector('#ph-pick').classList.remove('hidden');
+            }
+          };
+        }
+      });
+    };
     U.$('#add-free', view).onclick = () => { s.plan.push({ id: DB.uid(), title: '', min: '10' }); touch(); paintPlan(); U.$$('#plan [data-pf=title]', view).pop()?.focus(); };
     U.$('#add-drill', view).onclick = () => {
       if (!drills.length) { U.toast('עוד אין תרגילים בספרייה. סרטט תרגיל או הוסף חלק חופשי.'); return; }
@@ -278,7 +397,8 @@ const Sessions = (() => {
         '', '## מבנה האימון',
         ...(s.plan.length ? s.plan.map((r, i) => {
           const d = r.drillId && drills.find(x => x.id === r.drillId);
-          return `${i + 1}. ${r.title || 'חלק'} — ${r.min || '?'} דק׳${d?.desc ? ` (${d.desc.replace(/\n/g, ' ').slice(0, 160)})` : ''}`;
+          const what = r.what || d?.desc || '';
+          return `${i + 1}. ${r.title || 'חלק'} — ${r.min || '?'} דק׳${what ? ` (${what.replace(/\n/g, ' ').slice(0, 200)}${r.goal ? ' | מטרה: ' + r.goal : ''})` : ''}`;
         }) : ['לא נרשם']),
         '', '## סיכום',
         `מה עבד: ${s.worked || '—'}`, `מה לשפר: ${s.improve || '—'}`, s.players ? `הערות על שחקנים: ${s.players}` : '',

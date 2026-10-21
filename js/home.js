@@ -17,7 +17,7 @@ const Home = (() => {
     view.innerHTML = `
       <div class="page-head"><div><h1>${hello}${settings.coachName ? ', ' + U.esc(settings.coachName) : ''}</h1><p>${U.fmtDate(today)}</p></div>
         <div class="row"><a class="btn primary" href="#/board/new">${U.icon('board', 18)} סרטוט תרגיל</a><button class="btn" id="h-session">${U.icon('plus', 18)} אימון</button></div></div>
-      ${!Sync.isOn() && Sync.info().status !== 'unavailable' ? `<div class="cloud-banner"><span><b>הנתונים עדיין לא מגובים בענן.</b> התחבר פעם אחת, וכל מה שתשמור יופיע גם בטלפון וגם במחשב.</span><a class="btn sm primary" href="#/settings">התחברות לגיבוי</a></div>` : ''}
+      ${!Sync.isOn() && Sync.info().status !== 'unavailable' ? `<div class="cloud-banner"><span><b>הנתונים עדיין לא מגובים בענן.</b> נכנסים פעם אחת עם קוד ה-PIN, וכל מה שתשמור יופיע גם בטלפון וגם במחשב.</span><a class="btn sm primary" href="#/settings">התחברות לגיבוי</a></div>` : ''}
       <section class="week" aria-label="השבוע">
         ${week.map((d, i) => {
           const ds = sessions.filter(s => s.date === d).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
