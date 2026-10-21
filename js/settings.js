@@ -28,9 +28,10 @@ const Settings = (() => {
           </div>
         </div>
         <div>
+          <div class="panel" id="cloud"></div>
           <div class="panel">
-            <div class="panel-head"><h2>גיבוי</h2></div>
-            <p class="small">כל הנתונים נשמרים בדפדפן של המכשיר הזה בלבד. גיבוי יוצר קובץ אחד עם הכל — תרגילים, אימונים, תמונות, מסמכים ומשימות. שמור אותו בדרייב, ואפשר לשחזר ממנו גם במכשיר אחר.</p>
+            <div class="panel-head"><h2>גיבוי לקובץ</h2></div>
+            <p class="small">יוצר קובץ אחד עם הכל — תרגילים, אימונים, תמונות, מסמכים ומשימות. שימושי כגיבוי נוסף מעבר לענן.</p>
             ${est ? `<p class="small muted">בשימוש: ${U.fmtSize(est.usage || 0)}${persisted ? ' · אחסון קבוע מופעל' : ''}</p>` : ''}
             <div class="row">
               <button class="btn primary" id="exp">${U.icon('download', 18)} הורדת גיבוי</button>
@@ -39,12 +40,47 @@ const Settings = (() => {
             ${!persisted && navigator.storage?.persist ? `<button class="btn sm ghost" id="persist" style="margin-top:10px">בקשת אחסון קבוע מהדפדפן</button><p class="small muted">מונע מהדפדפן למחוק נתונים כשהמכשיר מתמלא.</p>` : ''}
           </div>
           <div class="panel">
-            <div class="panel-head"><h2>מחיקת כל הנתונים</h2></div>
-            <p class="small">מוחק את כל מה שבאתר במכשיר הזה. כדאי להוריד גיבוי קודם.</p>
-            <button class="btn danger" id="wipe">${U.icon('trash', 18)} מחיקת הכל</button>
+            <div class="panel-head"><h2>ניקוי המכשיר</h2></div>
+            <p class="small">מוחק את הנתונים מהדפדפן הזה בלבד. אם אתה מחובר לענן, הכל יירד מחדש מהגיבוי.</p>
+            <button class="btn danger" id="wipe">${U.icon('trash', 18)} מחיקה מהמכשיר</button>
           </div>
         </div>
       </div>`;
+
+    const cloud = U.$('#cloud', view);
+    const paintCloud = i => {
+      if (!cloud.isConnected) return unsub();
+      if (i.status === 'unavailable') {
+        cloud.innerHTML = `<div class="panel-head"><h2>גיבוי בענן</h2></div><p class="small">שירות הענן לא נטען. בדוק את החיבור לאינטרנט ורענן את הדף.</p>`;
+        return;
+      }
+      if (!i.email) {
+        cloud.innerHTML = `<div class="panel-head"><h2>גיבוי בענן</h2><span class="small"><span class="cloud-dot" style="background:var(--danger)"></span>לא מחובר</span></div>
+          <p class="small">אחרי התחברות כל מה ששמור באתר עולה לענן, ומופיע בכל מכשיר שתתחבר בו. אותו אימייל וסיסמה של האתר "סדר את החיים".</p>
+          ${i.error ? `<p class="hint" style="color:var(--danger)">${U.esc(i.error)}</p>` : ''}
+          <form class="stack" id="login">
+            <label class="field"><span>אימייל</span><input class="input" id="em" type="email" dir="ltr" autocomplete="username" value="${U.esc(CONFIG.defaultEmail)}"></label>
+            <label class="field"><span>סיסמה</span><input class="input" id="pw" type="password" dir="ltr" autocomplete="current-password"></label>
+            <button class="btn primary" type="submit" style="align-self:flex-start">התחברות</button>
+          </form>`;
+        U.$('#login', cloud).onsubmit = async e => {
+          e.preventDefault();
+          const b = e.target.querySelector('button'); b.disabled = true; b.textContent = 'מתחבר…';
+          try { await Sync.signIn(U.$('#em', cloud).value, U.$('#pw', cloud).value); U.toast('מחובר. הנתונים מגובים בענן'); }
+          catch (err) { U.toast(err.message, true); b.disabled = false; b.textContent = 'התחברות'; }
+        };
+        return;
+      }
+      const st = { ok: ['var(--ok)', 'מגובה'], syncing: ['var(--ball)', 'מסנכרן…'], error: ['var(--danger)', 'הסנכרון נתקע'] }[i.status] || ['var(--muted)', ''];
+      cloud.innerHTML = `<div class="panel-head"><h2>גיבוי בענן</h2><span class="small"><span class="cloud-dot" style="background:${st[0]}"></span>${st[1]}</span></div>
+        <p class="small">מחובר כ-<b dir="ltr">${U.esc(i.email)}</b>. כל שינוי עולה לענן תוך כמה שניות, ומכשירים אחרים מתעדכנים כשהאתר נפתח בהם.</p>
+        <p class="small muted">${i.lastSync ? 'סנכרון אחרון: ' + new Date(i.lastSync).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) : ''}${i.pending ? ` · ${i.pending} שינויים ממתינים` : ''}</p>
+        ${i.error ? `<p class="hint" style="color:var(--danger)">${U.esc(i.error)}</p>` : ''}
+        <div class="row"><button class="btn" id="sync-now">${U.icon('redo', 18)} סנכרון עכשיו</button><button class="btn ghost" id="sign-out">התנתקות</button></div>`;
+      U.$('#sync-now', cloud).onclick = () => Sync.run();
+      U.$('#sign-out', cloud).onclick = async () => { if (await U.confirm('להתנתק מהענן במכשיר הזה? הנתונים נשארים גם במכשיר וגם בענן.', 'התנתקות')) Sync.signOut(); };
+    };
+    const unsub = Sync.onChange(paintCloud);
 
     U.$('#save-gen', view).onclick = async () => {
       await DB.saveSettings({ coachName: U.$('#name', view).value.trim(), teams: U.$('#teams', view).value.split(',').map(x => x.trim()).filter(Boolean) });
@@ -76,8 +112,9 @@ const Settings = (() => {
     const p = U.$('#persist', view);
     if (p) p.onclick = async () => { const ok = await navigator.storage.persist(); U.toast(ok ? 'אחסון קבוע הופעל' : 'הדפדפן לא אישר. התקנת האתר למסך הבית בדרך כלל עוזרת.'); render(view); };
     U.$('#wipe', view).onclick = async () => {
-      if (!await U.confirm('למחוק את כל הנתונים במכשיר הזה? אי אפשר לבטל.', 'מחיקת הכל')) return;
-      await DB.wipe(); U.toast('הכל נמחק'); location.hash = '#/home';
+      const on = Sync.isOn();
+      if (!await U.confirm(on ? 'למחוק את הנתונים מהמכשיר הזה? הגיבוי בענן נשאר, והנתונים יירדו מחדש.' : 'למחוק את כל הנתונים במכשיר הזה? אין גיבוי בענן, ולכן אי אפשר לבטל.', 'מחיקה מהמכשיר')) return;
+      await DB.wipe(); U.toast('הנתונים נמחקו מהמכשיר'); if (on) Sync.run(); location.hash = '#/home';
     };
   }
   return { render };

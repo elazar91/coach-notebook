@@ -33,13 +33,14 @@ const DB = (() => {
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const all = s => tx(s, 'readonly', st => st.getAll()).then(a => a || []);
   const get = (s, id) => tx(s, 'readonly', st => st.get(id));
-  const put = (s, obj, touch = true) => {
+  /* silent=true: כתיבה שמגיעה מהענן, לא צריך להעלות אותה שוב */
+  const put = (s, obj, touch = true, silent = false) => {
     if (!obj.id) obj.id = uid();
     if (touch) obj.updatedAt = Date.now();
     if (!obj.createdAt) obj.createdAt = Date.now();
-    return tx(s, 'readwrite', st => st.put(obj)).then(() => obj);
+    return tx(s, 'readwrite', st => st.put(obj)).then(() => { if (!silent && typeof Sync !== 'undefined') Sync.track(s, obj.id); return obj; });
   };
-  const del = (s, id) => tx(s, 'readwrite', st => st.delete(id));
+  const del = (s, id, silent = false) => tx(s, 'readwrite', st => st.delete(id)).then(() => { if (!silent && typeof Sync !== 'undefined') Sync.track(s, id, true); });
   const clear = s => tx(s, 'readwrite', st => st.clear());
 
   /* קבצים (תמונות, מסמכים) נשמרים בנפרד */
@@ -83,7 +84,8 @@ const DB = (() => {
       }
     }
   }
-  async function wipe() { for (const s of STORES) await clear(s); }
+  /* מוחק רק מהמכשיר הזה; אם יש גיבוי בענן הנתונים יימשכו מחדש */
+  async function wipe() { for (const s of STORES) await clear(s); if (typeof Sync !== 'undefined') Sync.resetCursor(); }
 
   return { open, uid, all, get, put, del, saveFile, getFile, settings, saveSettings, exportAll, importAll, wipe };
 })();
