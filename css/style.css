@@ -215,8 +215,17 @@ textarea.input{min-height:90px;resize:vertical;line-height:1.5}
 .date-block span{font-size:.8rem;color:var(--muted)}
 .score{font-family:var(--font-head);font-size:1.1rem}
 .score small{font-family:var(--font-body);font-size:.75rem;color:var(--muted);display:block;text-align:center}
-.plan-row{display:grid;grid-template-columns:28px minmax(0,1fr) 84px auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.plan-row:last-child{border-bottom:none}
+.plan-item{border-bottom:1px solid var(--line);padding:6px 0 10px}
+.plan-row{display:grid;grid-template-columns:28px minmax(0,1fr) 84px auto;gap:8px;align-items:center;padding:4px 0}
+.plan-details{display:flex;gap:10px;align-items:flex-start;padding-inline-start:36px;line-height:1.45}
+.plan-thumb{width:64px;height:64px;object-fit:cover;border-radius:var(--r-s);border:1px solid var(--line);cursor:zoom-in;flex:none}
+.choices{display:grid;gap:8px;margin-top:10px}
+.choice{display:flex;gap:10px;align-items:flex-start;border:1.5px solid var(--line-strong);border-radius:var(--r-m);padding:12px 14px;cursor:pointer}
+.choice input{margin-top:5px;accent-color:var(--ball);width:18px;height:18px;flex:none}
+.choice > span{display:flex;flex-direction:column;gap:2px}
+.choice b{display:flex;align-items:center;gap:6px}
+.choice:has(input:checked){border-color:var(--ball);background:var(--ball-soft)}
+.drill-card .desc{font-size:.85rem;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:0}
 .plan-num{font-family:var(--font-head);color:var(--muted);text-align:center}
 .plan-row .title{font-weight:600}
 .plan-total{display:flex;justify-content:space-between;padding-top:10px;font-weight:600}
@@ -319,6 +328,7 @@ mark{background:#ffe08a;color:inherit;padding:0 1px;border-radius:2px}
   .session-row{grid-template-columns:62px minmax(0,1fr)}
   .session-row .score{display:none}
   .plan-row{grid-template-columns:24px minmax(0,1fr) 64px auto}
+  .plan-details{padding-inline-start:0}
   .tool{min-width:44px;font-size:.66rem;padding:5px 4px}
   .canvas-box{padding:6px}
 }
