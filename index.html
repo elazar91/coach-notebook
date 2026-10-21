@@ -21,7 +21,7 @@
       מחברת המאמן
     </div>
     <nav class="nav" id="nav"></nav>
-    <div class="side-foot">הנתונים נשמרים בדפדפן הזה. <a href="#/settings">גיבוי</a></div>
+    <a class="side-foot cloud" id="cloud-status" href="#/settings"></a>
   </aside>
   <main id="view" tabindex="-1"></main>
 </div>
@@ -29,8 +29,11 @@
 <div id="toast" aria-live="polite"></div>
 <div id="modal-root"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
 <script src="js/util.js"></script>
 <script src="js/db.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/court.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/home.js"></script>
