@@ -197,7 +197,7 @@ const Sessions = (() => {
         </div>`;
       }).join('') +
         `<div class="plan-total"><span>סה״כ</span><span style="color:${target && total > target ? 'var(--danger)' : 'inherit'}">${total} דק׳${target ? ` מתוך ${target}` : ''}</span></div>` +
-        (missing ? `<div class="row" style="margin-top:10px"><button class="btn sm" id="fill-details">${U.icon('sparkles', 16)} Claude ישלים פירוט ל-${missing === 1 ? 'תרגיל אחד' : missing + ' תרגילים'}</button><span class="small muted">מה עושים ומה המטרה, כדי שתדע בדיוק למה התכוונת גם בעוד חודשים</span></div>` : '');
+        (missing ? `<div class="row" style="margin-top:10px"><button class="btn sm" id="fill-details">${U.icon('sparkles', 16)} ניסוח פירוט עם Claude ל-${missing === 1 ? 'תרגיל אחד' : missing + ' תרגילים'}</button><span class="small muted">מה עושים ומה המטרה, כדי שתדע בדיוק למה התכוונת גם בעוד חודשים</span></div>` : '');
       const fb = U.$('#fill-details', box); if (fb) fb.onclick = () => fillDetails(fb);
     }
     U.$('#plan', view).addEventListener('input', e => {
@@ -233,7 +233,7 @@ ${todo.map(({ r, i }) => `${i}. ${r.title}${r.min ? ` (${r.min} דק׳)` : ''}`)
 
 ${DETAIL_RULES}
 החזר JSON בלבד, בלי טקסט נוסף, בפורמט: {"items":[{"i":<המספר שליד התרגיל>,"what":"...","goal":"..."}]}`;
-      const label = btn.innerHTML; btn.disabled = true; btn.textContent = 'Claude כותב…';
+      const label = btn.innerHTML; btn.disabled = true;
       try {
         const ans = await AI.ask(prompt, [], 'אתה מאמן כדורסל בכיר שכותב תיעוד מקצועי וקצר של תרגילים. אתה מחזיר JSON תקין בלבד.');
         if (ans === null) return;
@@ -250,7 +250,7 @@ ${DETAIL_RULES}
     U.$('#add-photo', view).onclick = () => {
       U.modal({
         title: 'תרגיל מתמונה',
-        body: `<p class="small">צלם את הלוח, דף התכנית או התרגיל במגרש. Claude יזהה את התרגילים ויכתוב לכל אחד מה עושים ומה המטרה.</p>
+        body: `<p class="small">צלם את הלוח, דף התכנית או התרגיל במגרש. האתר מכין שאלה ל-Claude (בחינם ב-claude.ai): מצרפים שם את התמונה, ו-Claude כותב לכל תרגיל מה עושים ומה המטרה.</p>
           <div class="choices">
             <label class="choice"><input type="radio" name="keep" value="1" checked>
               <span><b>${U.icon('image', 16)} לשמור את התמונה + תיעוד כתוב</b><span class="small muted">התמונה נשמרת ליד התרגיל, וההסבר מתחתיה</span></span></label>
@@ -274,7 +274,7 @@ ${DETAIL_RULES}
                 imgs.push((await U.blobToDataURL(small)).split(',')[1]);
                 if (keep) saved.push(await DB.saveFile(await U.compressImage(f), f.name));
               }
-              state.textContent = 'Claude קורא את התמונה וכותב תיעוד…';
+              state.textContent = 'ממתין לתשובה מ-Claude…';
               const prompt = `בתמונה${files.length > 1 ? 'ות' : ''} תיעוד של תרגיל או תרגילים שמאמן כדורסל העביר באימון (לוח מחיק, דף, שרטוט או צילום מהמגרש).
 קבוצה: ${s.team || 'לא צוין'}${s.goal ? `. מטרת האימון: ${s.goal}` : ''}.
 זהה כל תרגיל שמופיע. לכל תרגיל תן title (שם קצר וברור), minutes (משך אם מופיע או אם אפשר להעריך, אחרת null), ו-what ו-goal לפי הכללים:

@@ -16,16 +16,6 @@ const Settings = (() => {
               <button class="btn primary" id="save-gen" style="align-self:flex-start">שמירה</button>
             </div>
           </div>
-          <div class="panel">
-            <div class="panel-head"><h2>מפתח API (לא חובה)</h2></div>
-            <p class="small">כשאתה מחובר לגיבוי בענן, Claude כבר עונה ישר באתר וקורא תמונות, בלי מפתח. מפתח API אישי צריך רק אם תרצה מודל חזק יותר או כשאתה לא מחובר.</p>
-            <div class="stack">
-              <label class="field"><span>מפתח API</span><input class="input" id="key" type="password" dir="ltr" value="${U.esc(s.apiKey)}" placeholder="sk-ant-..." autocomplete="off"></label>
-              <label class="field"><span>מודל</span><input class="input" id="model" dir="ltr" value="${U.esc(s.model)}"></label>
-              <p class="hint">מפתח יוצרים ב-console.anthropic.com, והשימוש בו בתשלום לפי כמות. המפתח נשמר רק בדפדפן הזה ולא עולה לגיטהאב.</p>
-              <div class="row"><button class="btn primary" id="save-ai">שמירה</button><button class="btn" id="test-ai">בדיקת חיבור</button></div>
-            </div>
-          </div>
         </div>
         <div>
           <div class="panel" id="cloud"></div>
@@ -56,7 +46,7 @@ const Settings = (() => {
       }
       if (!i.email) {
         cloud.innerHTML = `<div class="panel-head"><h2>גיבוי בענן</h2><span class="small"><span class="cloud-dot" style="background:var(--danger)"></span>לא מחובר</span></div>
-          <p class="small">נכנסים עם אותו קוד PIN של "סדר את החיים". מאותו רגע הכל מגובה בענן, מופיע בכל מכשיר, ו-Claude עונה ישר באתר.</p>
+          <p class="small">נכנסים עם אותו קוד PIN של "סדר את החיים". מאותו רגע הכל מגובה בענן ומופיע בכל מכשיר.</p>
           ${i.error ? `<p class="hint" style="color:var(--danger)">${U.esc(i.error)}</p>` : ''}
           <form class="stack" id="login" style="max-width:280px">
             <input class="input" id="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" placeholder="••••" aria-label="קוד PIN" style="text-align:center;font-size:1.6rem;letter-spacing:.4em;direction:ltr">
@@ -90,16 +80,6 @@ const Settings = (() => {
     U.$('#save-gen', view).onclick = async () => {
       await DB.saveSettings({ coachName: U.$('#name', view).value.trim(), teams: U.$('#teams', view).value.split(',').map(x => x.trim()).filter(Boolean) });
       U.toast('נשמר');
-    };
-    U.$('#save-ai', view).onclick = async () => {
-      await DB.saveSettings({ apiKey: U.$('#key', view).value.trim(), model: U.$('#model', view).value.trim() || 'claude-sonnet-5-5' });
-      U.toast('נשמר');
-    };
-    U.$('#test-ai', view).onclick = async () => {
-      const s2 = { apiKey: U.$('#key', view).value.trim(), model: U.$('#model', view).value.trim() };
-      if (!s2.apiKey) { U.toast('הכנס מפתח קודם', true); return; }
-      try { await AI.callAPI(s2, 'ענה במילה אחת: מוכן?', []); U.toast('החיבור עובד'); }
-      catch (e) { U.toast(e.message, true); }
     };
     U.$('#exp', view).onclick = async () => {
       const m = U.modal({ title: 'מכין גיבוי…', body: '<div class="progress"><i></i></div>' });

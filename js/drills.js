@@ -36,6 +36,7 @@ const Drills = (() => {
             <button class="btn sm icon" data-vid="${d.id}" title="סרטון">${U.icon('video', 16)}</button>
             <button class="btn sm icon" data-link="${d.id}" title="קישור">${U.icon('link', 16)}</button>
             <button class="btn sm icon" data-dup="${d.id}" title="שכפול">${U.icon('copy', 16)}</button>
+            <button class="btn sm icon danger" data-del="${d.id}" title="מחיקה" style="margin-inline-start:auto">${U.icon('trash', 16)}</button>
           </div>
         </article>`).join('')}</div>` : `<div class="empty"><h3>לא נמצאו תרגילים</h3><p>נסה מילה אחרת או בחר "הכל".</p></div>`;
     }
@@ -49,8 +50,12 @@ const Drills = (() => {
     };
     grid.onclick = async e => {
       const b = e.target.closest('button'); if (!b) return;
-      const d = drills.find(x => x.id === (b.dataset.vid || b.dataset.link || b.dataset.dup));
+      const d = drills.find(x => x.id === (b.dataset.vid || b.dataset.link || b.dataset.dup || b.dataset.del));
       if (!d) return;
+      if (b.dataset.del) {
+        if (!await U.confirm(`למחוק את "${d.name || 'תרגיל ללא שם'}"?`)) return;
+        await DB.del('drills', d.id); U.toast('התרגיל נמחק'); render(view); return;
+      }
       if (b.dataset.vid) Board.videoFlow(d);
       if (b.dataset.link) Board.linkModal(d);
       if (b.dataset.dup) {

@@ -333,9 +333,18 @@ const Board = (() => {
     }
     function draw() {
       if (!cv.isConnected) return;
-      vp = Court.render(ctx, dimsPx.W, dimsPx.H, drill, playing || (t > 0 && !Number.isInteger(t))
+      const anim = playing || (t > 0 && !Number.isInteger(t));
+      vp = Court.render(ctx, dimsPx.W, dimsPx.H, drill, anim
         ? { t, dpr: dimsPx.dpr }
         : { frame: fi, dpr: dimsPx.dpr, ghost: true, sel, selLine, draft });
+      const sl = !anim && selectedLine();
+      if (curvable(sl)) {
+        const h = handleOf(sl);
+        ctx.save();
+        ctx.fillStyle = '#ee6a1f'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.08;
+        ctx.beginPath(); ctx.arc(h[0], h[1], 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
     }
     const toWorld = e => {
       const r = cv.getBoundingClientRect();
@@ -508,11 +517,47 @@ const Board = (() => {
       frame().lines = frame().lines.filter(x => x !== l);
     }
 
+    /* ---------- עיגול קווים ---------- */
+    function curvable(l) { return !!l && l.type !== 'pass'; }
+    function handleOf(l) {
+      if (l.mid) return l.mid;
+      const pts = l.pts; let total = 0;
+      for (let i = 1; i < pts.length; i++) total += Court.dist(pts[i - 1], pts[i]);
+      let half = total / 2;
+      for (let i = 1; i < pts.length; i++) {
+        const d = Court.dist(pts[i - 1], pts[i]);
+        if (half <= d) { const f = d ? half / d : 0; return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f]; }
+        half -= d;
+      }
+      return pts[0];
+    }
+    // הקו עובר דרך נקודה m באמצעו (עקומה חלקה בין ההתחלה לסוף)
+    function bendTo(l, m) {
+      const a = l.pts[0], z = l.pts[l.pts.length - 1];
+      const c = [2 * m[0] - (a[0] + z[0]) / 2, 2 * m[1] - (a[1] + z[1]) / 2];
+      const out = [];
+      for (let i = 0; i <= 16; i++) {
+        const t = i / 16, u = 1 - t;
+        out.push([u * u * a[0] + 2 * u * t * c[0] + t * t * z[0], u * u * a[1] + 2 * u * t * c[1] + t * t * z[1]]);
+      }
+      l.pts = out; l.mid = m.slice();
+    }
+    function bendSide(l, dir) {
+      const a = l.pts[0], z = l.pts[l.pts.length - 1];
+      const L = Court.dist(a, z) || 1, nx = -(z[1] - a[1]) / L, ny = (z[0] - a[0]) / L;
+      bendTo(l, [(a[0] + z[0]) / 2 + nx * dir * L * 0.28, (a[1] + z[1]) / 2 + ny * dir * L * 0.28]);
+    }
+    function straighten(l) { l.pts = [l.pts[0], l.pts[l.pts.length - 1]]; delete l.mid; }
+    function selectedLine() { return selLine && (frame().lines || []).find(l => l.id === selLine); }
+
     cv.addEventListener('pointerdown', e => {
       if (playing) return;
       if (t !== fi) { t = fi; U.$('#scrub', view).value = fi; }
       cv.setPointerCapture(e.pointerId);
       const p = toWorld(e);
+      // גרירת הידית של קו מסומן — מעגלת אותו
+      const sl = selectedLine();
+      if (curvable(sl) && Court.dist(p, handleOf(sl)) < 0.6) { drag = { curve: sl }; cv.style.cursor = 'grabbing'; return; }
       const hitO = hitObject(p);
       if (tool === 'move' || (['off', 'def', 'coach', 'cone'].includes(tool) && hitO)) {
         if (tool === 'move' && hitBall(p) && !(hitO && Court.dist(p, frame().pos[hitO.id]) < Court.R * .7)) {
@@ -540,7 +585,8 @@ const Board = (() => {
       }
       if (isLineTool(tool)) {
         let start = p;
-        if (hitO) start = frame().pos[hitO.id].slice();
+        const near = hitO || (tool !== 'pass' ? objNear(frame(), p, 1.6) : null);
+        if (near) start = frame().pos[near.id].slice();
         else if (tool === 'pass' && frame().ball && hitBall(p)) start = Court.ballAt(drill, fi);
         draft = { type: tool, pts: [start] };
         draw();
@@ -550,6 +596,7 @@ const Board = (() => {
       if (!drag && !draft) return;
       const p = clampP(toWorld(e));
       if (drag?.ball) { frame().ball = { p }; draw(); return; }
+      if (drag?.curve) { bendTo(drag.curve, p); draw(); return; }
       if (drag) { frame().pos[drag.id] = p; drag.moved = true; draw(); return; }
       if (draft) {
         const lastP = draft.pts[draft.pts.length - 1];
@@ -558,6 +605,7 @@ const Board = (() => {
       }
     });
     const endPointer = e => {
+      if (drag?.curve) { drag = null; cv.style.cursor = tool === 'move' ? 'grab' : 'crosshair'; commit(); renderSel(); draw(); return; }
       if (drag?.ball) {
         const p = toWorld(e), o = hitObject(p);
         if (o && o.t !== 'cone') frame().ball = { h: o.id };
@@ -579,8 +627,9 @@ const Board = (() => {
           (frame().lines ||= []).push(line);
           draft = null;
           const created = applyLine(line, fi);
-          commit(); renderFrames();
-          if (created) U.toast(`נוצר שלב ${fi + 2} אוטומטית. לחץ "הפעלה" כדי לראות את התנועה`);
+          if (curvable(line)) { selLine = line.id; sel = null; }
+          commit(); renderFrames(); renderSel();
+          if (created) U.toast(`השחקן יזוז בהפעלה. אפשר לגרור את העיגול הכתום כדי לעגל את הקו`);
         } else draft = null;
         draw();
       }
@@ -606,9 +655,19 @@ const Board = (() => {
       } else if (line) {
         box.classList.remove('hidden');
         box.innerHTML = `<div class="panel-head"><h3>קו ${LINE_NAMES[line.type]}</h3></div>
+          ${curvable(line) ? `<p class="small muted" style="margin-top:0">גרור את העיגול הכתום שעל הקו כדי לעגל אותו, או בחר:</p>
+          <div class="row" style="margin-bottom:10px">
+            <button class="btn sm" data-bend="1" title="עיקול לצד אחד">${U.icon('undo', 16)} עיקול</button>
+            <button class="btn sm" data-bend="-1" title="עיקול לצד השני">${U.icon('redo', 16)} עיקול</button>
+            <button class="btn sm" data-bend="0">ישר</button></div>` : ''}
           <div class="row"><select class="input grow" id="line-type">${Object.entries(LINE_NAMES).map(([k, v]) => `<option value="${k}" ${k === line.type ? 'selected' : ''}>${v}</option>`).join('')}</select>
           <button class="btn danger" id="line-del">${U.icon('trash', 18)}</button></div>`;
         U.$('#line-type', box).onchange = e => { unapplyLine(line, fi); line.type = e.target.value; if (line.type === 'pass') line.pts = [line.pts[0], line.pts[line.pts.length - 1]]; applyLine(line, fi); commit(); renderFrames(); draw(); renderSel(); };
+        U.$$('[data-bend]', box).forEach(b => b.onclick = () => {
+          const d = +b.dataset.bend;
+          if (d) bendSide(line, d); else straighten(line);
+          commit(); draw();
+        });
         U.$('#line-del', box).onclick = () => { removeLine(line); selLine = null; commit(); renderFrames(); renderSel(); draw(); };
       } else if (!drill.objects.length) {
         box.classList.remove('hidden');

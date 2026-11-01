@@ -92,7 +92,8 @@ const Docs = (() => {
           <div style="min-width:0"><h3>${U.esc(d.title)}</h3>
             <div class="row small muted" style="gap:8px">${d.cat ? `<span class="tag ball">${U.esc(d.cat)}</span>` : ''}${(d.tags || '').split(',').map(t => t.trim()).filter(Boolean).map(t => `<span class="tag">${U.esc(t)}</span>`).join('')}<span>${new Date(d.createdAt).toLocaleDateString('he-IL')}</span></div>
             ${m.snip ? `<div class="snippet">${m.snip}</div>` : d.notes ? `<div class="snippet">${U.esc(d.notes.slice(0, 160))}</div>` : ''}</div>
-          <span class="small muted">${d.size ? U.fmtSize(d.size) : ''}</span>
+          <div class="row" style="gap:6px;flex-wrap:nowrap;align-self:center"><span class="small muted">${d.size ? U.fmtSize(d.size) : ''}</span>
+            <button class="btn sm icon ghost danger" data-del="${d.id}" title="מחיקה" aria-label="מחיקת ${U.esc(d.title)}">${U.icon('trash', 16)}</button></div>
         </div>`;
       }).join('')}</div>` : `<div class="empty"><h3>לא נמצא</h3><p>לא מצאתי "${U.esc(filter.q)}". נסה מילה אחרת או חלק ממילה.</p></div>`;
     };
@@ -100,8 +101,18 @@ const Docs = (() => {
     const q = U.$('#q', view); q.oninput = U.debounce(() => { filter.q = q.value; paint(); }, 150);
     U.$('#cats', view).onclick = e => { const b = e.target.closest('[data-c]'); if (!b) return; filter.cat = b.dataset.c; U.$$('#cats .chip', view).forEach(c => c.classList.toggle('on', c === b)); paint(); };
     const open = id => openDoc(docs.find(d => d.id === id), () => render(view));
-    rows.onclick = e => { const r = e.target.closest('[data-id]'); if (r) open(r.dataset.id); };
-    rows.onkeydown = e => { if (e.key === 'Enter') { const r = e.target.closest('[data-id]'); if (r) open(r.dataset.id); } };
+    rows.onclick = async e => {
+      const del = e.target.closest('[data-del]');
+      if (del) {
+        e.stopPropagation();
+        const d = docs.find(x => x.id === del.dataset.del);
+        if (!await U.confirm(`למחוק את "${d.title}"?`)) return;
+        if (d.fileId) await DB.del('files', d.fileId);
+        await DB.del('docs', d.id); U.toast('המסמך נמחק'); render(view); return;
+      }
+      const r = e.target.closest('[data-id]'); if (r) open(r.dataset.id);
+    };
+    rows.onkeydown = e => { if (e.key === 'Enter' && !e.target.closest('[data-del]')) { const r = e.target.closest('[data-id]'); if (r) open(r.dataset.id); } };
 
     async function upload(files) {
       if (!files.length) return;
