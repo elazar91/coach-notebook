@@ -4,6 +4,7 @@
     ['home', 'בית', 'home'],
     ['drills', 'תרגילים', 'drills'],
     ['sessions', 'אימונים', 'sessions'],
+    ['games', 'משחקים', 'calendar'],
     ['docs', 'מסמכים', 'docs'],
     ['tasks', 'משימות', 'tasks'],
     ['settings', 'הגדרות', 'settings'],
@@ -26,7 +27,7 @@
     setActive(SECTION[page] || page);
     view.innerHTML = '';
     window.scrollTo(0, 0);
-    const titles = { home: 'בית', drills: 'תרגילים', board: 'סרטוט תרגיל', sessions: 'אימונים', session: 'אימון', docs: 'מסמכים', tasks: 'משימות', settings: 'הגדרות' };
+    const titles = { home: 'בית', drills: 'תרגילים', board: 'סרטוט תרגיל', sessions: 'אימונים', session: 'אימון', docs: 'מסמכים', tasks: 'משימות', settings: 'הגדרות', games: 'משחקים והסעות' };
     document.title = (titles[page] ? titles[page] + ' · ' : '') + 'מחברת המאמן';
     try {
       switch (page) {
@@ -37,6 +38,7 @@
         case 'session': return await Sessions.edit(view, id);
         case 'docs': return await Docs.render(view);
         case 'tasks': return await Tasks.render(view);
+        case 'games': return await Games.render(view);
         case 'settings': return await Settings.render(view);
         default: location.hash = '#/home';
       }
