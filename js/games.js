@@ -3,7 +3,7 @@
    מספרי הטלפון נשמרים בהגדרות (מגובים בענן), לא בקוד — כי הקוד ציבורי. */
 const Games = (() => {
   const API = 'https://ibasketball.co.il/wp-json/sportspress/v2';
-  const CACHE_KEY = 'coach-games-v1';
+  const CACHE_KEY = 'coach-games-v2';
   const MAX_AGE = 3 * 3600e3;            // רענון אוטומטי כל 3 שעות
   const ARRIVE_BEFORE = 35;              // דקות הגעה לפני המשחק
 
@@ -14,6 +14,7 @@ const Games = (() => {
     { key: 'ef', label: 'אפרת', search: 'אפרת',
       names: ['אליצור ג. עציון אפרת', 'אליצור ג.ע. אפרת', 'אליצור ג.עציון/אפרת', 'אליצור גוש עציון אפרת'],
       onlyGroups: ['ילדים ב׳'] },
+    { key: 'hj', label: 'הפועל ירושלים', external: true },   // הקבוצה הבוגרת: ליגת Winner, גביע ויורוקאפ
   ];
   /* מאמן לכל שכבה (קרית ארבע) */
   const COACHES = { 'קט-סל א׳': 'נפתלי', 'ילדים ב׳': 'אמיתי' };
@@ -95,7 +96,7 @@ const Games = (() => {
   async function fetchAll() {
     const since = seasonStart();
     const teams = [];
-    for (const club of CLUBS) {
+    for (const club of CLUBS.filter(c => !c.external)) {
       const found = await get('teams', { search: club.search, per_page: 100, _fields: 'id,title,link' });
       for (const t of found) {
         if (!club.names.some(n => same(n, t.title.rendered))) continue;
@@ -134,10 +135,35 @@ const Games = (() => {
       games.push({ id: e.id, date: e.date.slice(0, 10), time: e.date.slice(11, 16), home, away,
         venue: (e.venues || []).map(v => V[v]).filter(Boolean).join(', '), league: (e.leagues || []).map(l => L[l]).filter(Boolean).join(' / '), sides });
     }
+    games.push(...await fetchHapoel());
+    if (games.some(g => g.sides[0].club === 'hj')) ours.push({ id: 0, club: 'hj', group: 'בוגרים' });
     games.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const data = { at: Date.now(), teams: ours, games };
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (e) {}
     return data;
+  }
+  /* הפועל ירושלים: ליגה וגביע מאתר המנהלת (דרך השרת של האתר), יורוקאפ מהאתר של היורוליג */
+  async function fetchHapoel() {
+    const out = [], he = n => n.replace(/Hapoel (Midtown )?Jerusalem/i, 'הפועל י-ם');
+    try {
+      const d = await (await fetch('/api/hapoel')).json();
+      (d.games || []).forEach((g, i) => out.push({ id: `hj-${g.date}-${i}`, date: g.date, time: g.time, home: g.home, away: g.away,
+        venue: g.isHome ? 'פיס ארנה, ירושלים' : '', league: g.stage, result: g.result,
+        sides: [{ club: 'hj', group: /גביע/.test(g.stage) ? 'גביע' : 'ווינר', isHome: g.isHome }] }));
+    } catch (e) {}
+    try {
+      const y = seasonStart().slice(0, 4);
+      const x = new DOMParser().parseFromString(await (await fetch(`https://api-live.euroleague.net/v2/competitions/U/seasons/U${y}/games?teamCode=JER`)).text(), 'text/xml');
+      const q = (g, s) => g.querySelector(s)?.textContent || '';
+      x.querySelectorAll('Data > GameDetailsModel').forEach(g => {
+        const t = new Date(q(g, ':scope > UtcDate')).toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' });
+        out.push({ id: 'hjE-' + q(g, ':scope > Id'), date: t.slice(0, 10), time: t.slice(11, 16),
+          home: he(q(g, ':scope > Local > Club > Name')), away: he(q(g, ':scope > Road > Club > Name')),
+          venue: q(g, ':scope > Venue > Name'), league: 'יורוקאפ · ' + q(g, ':scope > RoundName'),
+          sides: [{ club: 'hj', group: 'יורוקאפ', isHome: q(g, ':scope > Local > Club > Code') === 'JER' }] });
+      });
+    } catch (e) {}
+    return out;
   }
   function cached() { try { return JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) { return null; } }
   let inflight = null;
@@ -170,7 +196,7 @@ const Games = (() => {
     if (g.kind) return `${EVENT_ICON[g.kind]} ${g.time ? g.time + ' ' : ''}${g.title}`;
     if (g.sides.length > 1) return `🏀 ${g.time} ${short ? '' : g.sides[0].group + ' · '}דרבי אפרת–קרית ארבע`;
     const s = g.sides[0];
-    return `${s.isHome ? '🏠' : '🚌'} ${g.time} ${s.group}${short ? '' : ' ' + clubLabel(s.club) + ' · ' + (s.isHome ? 'בית' : 'חוץ')}`;
+    return `${s.isHome ? '🏠' : '🚌'} ${g.time || '?'} ${s.group}${short ? '' : ' ' + clubLabel(s.club) + ' · ' + (s.isHome ? 'בית' : 'חוץ')}`;
   }
   const chipHTML = g => { const [ico, ...rest] = chipText(g, true).split(' '); return `<span class="ico">${ico}</span> <span class="txt">${U.esc(rest.join(' '))}</span>`; };
   function gameCard(g) {
@@ -180,7 +206,7 @@ const Games = (() => {
       <div style="min-width:0">
         <div class="row" style="gap:8px;flex-wrap:wrap">${g.sides.map(s => `<span class="club-tag ${s.club}">${clubLabel(s.club)} · ${U.esc(s.group)}</span><span class="ha ${s.isHome ? 'home' : 'away'}">${s.isHome ? '🏠 בית' : '🚌 חוץ'}</span>`).join('')}</div>
         <h3 style="font-family:var(--font-body);font-weight:700;margin:4px 0 2px">${U.esc(g.home)} – ${U.esc(g.away)}</h3>
-        <div class="muted small">יום ${U.DAYS[U.parseISO(g.date).getDay()]} · ${g.time}${g.venue ? ' · ' + U.esc(g.venue) : ''}</div>
+        <div class="muted small">יום ${U.DAYS[U.parseISO(g.date).getDay()]} · ${g.time || 'שעה לא סופית'}${g.venue ? ' · ' + U.esc(g.venue) : ''}${g.result ? ' · תוצאה ' + U.esc(g.result) : ''}</div>
       </div>
     </div>`;
   }
