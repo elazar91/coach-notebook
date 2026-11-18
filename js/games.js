@@ -151,16 +151,17 @@ const Games = (() => {
     return clubs.length > 1 ? 'derby' : `${clubs[0]} ${g.sides[0].isHome ? 'home' : 'away'}`;
   }
   function chipText(g, short = false) {
-    if (g.sides.length > 1) return `${g.time} ${short ? '' : g.sides[0].group + ' · '}דרבי אפרת–קרית ארבע`;
+    if (g.sides.length > 1) return `🏀 ${g.time} ${short ? '' : g.sides[0].group + ' · '}דרבי אפרת–קרית ארבע`;
     const s = g.sides[0];
-    return `${g.time} ${s.group}${short ? '' : ' ' + clubLabel(s.club)} · ${s.isHome ? 'בית' : 'חוץ'}`;
+    return `${s.isHome ? '🏠' : '🚌'} ${g.time} ${s.group}${short ? '' : ' ' + clubLabel(s.club) + ' · ' + (s.isHome ? 'בית' : 'חוץ')}`;
   }
+  const chipHTML = g => { const [ico, ...rest] = chipText(g, true).split(' '); return `<span class="ico">${ico}</span> <span class="txt">${U.esc(rest.join(' '))}</span>`; };
   function gameCard(g) {
     const today = U.isoDate();
     return `<div class="game-row ${chipClass(g).split(' ')[0]} ${g.date < today ? 'past' : ''}">
       <div class="date-block"><b>${U.parseISO(g.date).getDate()}</b><span>${U.MONTHS[U.parseISO(g.date).getMonth()]}</span></div>
       <div style="min-width:0">
-        <div class="row" style="gap:8px;flex-wrap:wrap">${g.sides.map(s => `<span class="club-tag ${s.club}">${clubLabel(s.club)} · ${U.esc(s.group)}</span><span class="ha ${s.isHome ? 'home' : 'away'}">${s.isHome ? 'בית' : 'חוץ'}</span>`).join('')}</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">${g.sides.map(s => `<span class="club-tag ${s.club}">${clubLabel(s.club)} · ${U.esc(s.group)}</span><span class="ha ${s.isHome ? 'home' : 'away'}">${s.isHome ? '🏠 בית' : '🚌 חוץ'}</span>`).join('')}</div>
         <h3 style="font-family:var(--font-body);font-weight:700;margin:4px 0 2px">${U.esc(g.home)} – ${U.esc(g.away)}</h3>
         <div class="muted small">יום ${U.DAYS[U.parseISO(g.date).getDay()]} · ${g.time}${g.venue ? ' · ' + U.esc(g.venue) : ''}</div>
       </div>
@@ -217,11 +218,11 @@ const Games = (() => {
             const dg = inMonth.filter(g => g.date === d);
             return `<div class="cal-d ${d.slice(0, 7) !== month ? 'out' : ''} ${d === today ? 'today' : ''}">
               <span class="cal-n">${U.parseISO(d).getDate()}</span>
-              ${dg.map(g => `<button class="cal-g ${chipClass(g)}" data-g="${g.id}" title="${U.esc(g.home + ' – ' + g.away)}">${U.esc(chipText(g, true))}</button>`).join('')}
+              ${dg.map(g => `<button class="cal-g ${chipClass(g)}" data-g="${g.id}" title="${U.esc(g.home + ' – ' + g.away)}">${chipHTML(g)}</button>`).join('')}
             </div>`;
           }).join('')}
         </div>
-        <div class="cal-legend small muted">${CLUBS.map(c => `<span><i class="dot ${c.key}"></i>${c.label}</span>`).join('')}<span><i class="dot derby"></i>דרבי ביניהן</span><span>בית = צבע מלא · חוץ = מסגרת</span></div>
+        <div class="cal-legend small muted">${CLUBS.map(c => `<span><i class="dot ${c.key}"></i>${c.label}</span>`).join('')}<span><i class="dot derby"></i>דרבי ביניהן</span><span>🏠 בית = צבע מלא · 🚌 חוץ = מסגרת</span></div>
       </div>
       <div class="cal-agenda">${inMonth.length ? inMonth.map(gameCard).join('') : '<div class="empty"><p>אין משחקים החודש</p></div>'}</div>`;
     const shift = n => { const d = new Date(y, m - 1 + n, 1); month = U.isoDate(d).slice(0, 7); render(view); };
@@ -293,7 +294,7 @@ const Games = (() => {
       lines.push('', dayTitle(d));
       gs.forEach((g, i) => {
         if (i) lines.push('');
-        lines.push(`${g.side.group} - ${COACHES[g.side.group] || ''}`, `משחק ${g.side.isHome ? 'בית' : 'חוץ'} ב${g.time} נגד ${opp(g)}`);
+        lines.push(`${g.side.group} - ${COACHES[g.side.group] || ''}`, `${g.side.isHome ? '🏠' : '🚌'} משחק ${g.side.isHome ? 'בית' : 'חוץ'} ב${g.time} נגד ${opp(g)}`);
         if (g.dep) lines.push(`הסעה בשעה ${g.dep}`);
       });
     }
