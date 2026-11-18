@@ -366,6 +366,11 @@ mark{background:#ffe08a;color:inherit;padding:0 1px;border-radius:2px}
 .cal-g.ef.away,.day-item.game.ef.away,.day.today .day-item.game.ef.away{background:var(--ef-soft);color:var(--ef);border:1.5px solid var(--ef)}
 .day.today .day-item.game.home.ka{background:var(--ka);color:#fff}.day.today .day-item.game.home.ef{background:var(--ef);color:#fff}
 .cal-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}
+:root{--l5:#7c3aed;--custom:#d97706}
+.dot.league5{background:var(--l5)}.dot.custom{background:var(--custom)}
+.cal-g.ev.league5,.day-item.game.ev.league5,.club-tag.ev.league5{background:var(--l5);color:#fff;border-color:var(--l5)}
+.cal-g.ev.custom,.day-item.game.ev.custom,.club-tag.ev.custom{background:var(--custom);color:#fff;border-color:var(--custom)}
+.game-row.ev.league5{border-inline-start-color:var(--l5)}.game-row.ev.custom{border-inline-start-color:var(--custom)}
 .cal-agenda{display:none;margin-top:12px}
 .msg{white-space:pre-wrap;font-family:var(--font-body);font-size:.92rem;background:var(--paper);border-radius:var(--r-s);padding:10px 12px;margin:0;max-height:320px;overflow:auto}
 @media (max-width:700px){
