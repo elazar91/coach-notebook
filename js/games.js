@@ -3,7 +3,7 @@
    מספרי הטלפון נשמרים בהגדרות (מגובים בענן), לא בקוד — כי הקוד ציבורי. */
 const Games = (() => {
   const API = 'https://ibasketball.co.il/wp-json/sportspress/v2';
-  const CACHE_KEY = 'coach-games-v2';
+  const CACHE_KEY = 'coach-games-v3';
   const MAX_AGE = 3 * 3600e3;            // רענון אוטומטי כל 3 שעות
   const ARRIVE_BEFORE = 35;              // דקות הגעה לפני המשחק
 
@@ -153,14 +153,14 @@ const Games = (() => {
     } catch (e) {}
     try {
       const y = seasonStart().slice(0, 4);
-      const x = new DOMParser().parseFromString(await (await fetch(`https://api-live.euroleague.net/v2/competitions/U/seasons/U${y}/games?teamCode=JER`)).text(), 'text/xml');
-      const q = (g, s) => g.querySelector(s)?.textContent || '';
-      x.querySelectorAll('Data > GameDetailsModel').forEach(g => {
-        const t = new Date(q(g, ':scope > UtcDate')).toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' });
-        out.push({ id: 'hjE-' + q(g, ':scope > Id'), date: t.slice(0, 10), time: t.slice(11, 16),
-          home: he(q(g, ':scope > Local > Club > Name')), away: he(q(g, ':scope > Road > Club > Name')),
-          venue: q(g, ':scope > Venue > Name'), league: 'יורוקאפ · ' + q(g, ':scope > RoundName'),
-          sides: [{ club: 'hj', group: 'יורוקאפ', isHome: q(g, ':scope > Local > Club > Code') === 'JER' }] });
+      const d = await (await fetch(`https://api-live.euroleague.net/v2/competitions/U/seasons/U${y}/games?teamCode=JER`)).json();
+      (d.data || []).forEach(g => {
+        const t = new Date(g.utcDate).toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' });
+        const score = typeof g.local?.score === 'number' && g.played ? `${g.local.score}-${g.road.score}` : '';
+        out.push({ id: 'hjE-' + g.id, date: t.slice(0, 10), time: t.slice(11, 16),
+          home: he(g.local?.club?.name || ''), away: he(g.road?.club?.name || ''),
+          venue: g.venue?.name || '', league: 'יורוקאפ · ' + (g.roundName || ''), result: score,
+          sides: [{ club: 'hj', group: 'יורוקאפ', isHome: g.local?.club?.code === 'JER' }] });
       });
     } catch (e) {}
     return out;
