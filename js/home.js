@@ -1,7 +1,7 @@
 /* מסך הבית: השבוע של המאמן */
 const Home = (() => {
   async function render(view) {
-    const [sessions, tasks, drills, docs, settings] = await Promise.all([DB.all('sessions'), DB.all('tasks'), DB.all('drills'), DB.all('docs'), DB.settings()]);
+    const [sessions, tasks, drills, docs, settings, games] = await Promise.all([DB.all('sessions'), DB.all('tasks'), DB.all('drills'), DB.all('docs'), DB.settings(), Games.forHome().catch(() => [])]);
     const today = U.isoDate();
     const d0 = U.parseISO(today); d0.setDate(d0.getDate() - d0.getDay());
     const week = [...Array(7)].map((_, i) => { const d = new Date(d0); d.setDate(d0.getDate() + i); return U.isoDate(d); });
@@ -24,6 +24,7 @@ const Home = (() => {
           const dt = tasks.filter(t => t.due === d && (t.status !== 'done' || d >= today));
           return `<div class="day ${d === today ? 'today' : ''}">
             <div class="day-name"><span>${U.DAYS[i]}</span><span class="day-num">${U.parseISO(d).getDate()}</span></div>
+            ${games.filter(g => g.date === d).map(g => `<a class="day-item game ${Games.chipClass(g)}" href="#/games" title="${U.esc(g.home + ' – ' + g.away)}">${U.esc(Games.chipText(g, true))}</a>`).join('')}
             ${ds.map(s => `<a class="day-item session" href="#/session/${s.id}">${s.time ? U.esc(s.time) + ' ' : ''}${U.esc(s.team || 'אימון')}</a>`).join('')}
             ${dt.slice(0, 4).map(t => `<button class="day-item ${t.status === 'done' ? 'done' : ''}" data-task="${t.id}">${U.esc(t.title)}</button>`).join('')}
             ${dt.length > 4 ? `<a class="small" href="#/tasks" style="opacity:.8">ועוד ${dt.length - 4}</a>` : ''}
