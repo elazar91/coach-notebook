@@ -367,6 +367,11 @@ mark{background:#ffe08a;color:inherit;padding:0 1px;border-radius:2px}
 .day.today .day-item.game.home.ka{background:var(--ka);color:#fff}.day.today .day-item.game.home.ef{background:var(--ef);color:#fff}
 .cal-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}
 :root{--l5:#7c3aed;--custom:#d97706}
+:root{--hj:#c8102e;--hj-soft:#fbe3e6}
+.dot.hj,.club-tag.hj{background:var(--hj)}.game-row.hj{border-inline-start-color:var(--hj)}
+.cal-g.hj,.day-item.game.hj{background:var(--hj);color:#fff;border-color:var(--hj)}
+.cal-g.hj.away,.day-item.game.hj.away,.day.today .day-item.game.hj.away{background:var(--hj-soft);color:var(--hj);border:1.5px solid var(--hj)}
+.day.today .day-item.game.home.hj{background:var(--hj);color:#fff}
 .dot.league5{background:var(--l5)}.dot.custom{background:var(--custom)}
 .cal-g.ev.league5,.day-item.game.ev.league5,.club-tag.ev.league5{background:var(--l5);color:#fff;border-color:var(--l5)}
 .cal-g.ev.custom,.day-item.game.ev.custom,.club-tag.ev.custom{background:var(--custom);color:#fff;border-color:var(--custom)}
